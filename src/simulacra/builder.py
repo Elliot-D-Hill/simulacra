@@ -178,18 +178,6 @@ class Predictor(_HasFamily):
         super().__init__(run, recipe)
         self._re_count: int = 0
 
-    def _default_membership(
-        self, batch: list[int], n: int, t: int, levels: int
-    ) -> Tensor:
-        """One-hot group assignment: subject i belongs to group i % levels."""
-        indices = torch.arange(n) % levels
-        return (
-            torch.nn.functional.one_hot(indices, levels)
-            .unsqueeze(1)
-            .float()
-            .expand(*batch, n, t, levels)
-        )
-
     def random_effects(
         self,
         levels: int,
@@ -200,14 +188,13 @@ class Predictor(_HasFamily):
         b: Prior = UNIT_NORMAL,
     ) -> Predictor:
         index = self._re_count
-
-        def step(data: PredictorData) -> tuple[PredictorData, dict[str, Tensor]]:
-            *batch, n, t, _ = data.eta.shape
-            w = W if W is not None else self._default_membership(batch, n, t, levels)
-            return random_effects(data, index, levels, q, w, B, b)
+        W = W or dist.Dirichlet(torch.ones(levels))
 
         result = Predictor(
-            _compose(self._run, step),
+            _compose(
+                self._run,
+                lambda data: random_effects(data, index, levels, q, W, B, b),
+            ),
             (*self._recipe, _label(random_effects, levels=levels, q=q, W=W, B=B, b=b)),
         )
         result._re_count = index + 1
