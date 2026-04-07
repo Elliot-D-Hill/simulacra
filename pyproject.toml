@@ -1,0 +1,24 @@
+[project]
+name = "simulacra"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Elliot Hill", email = "elliot.douglas.hill@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "beartype>=0.22.9",
+    "tensordict>=0.11.0",
+    "torch>=2.11.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.9,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "ruff>=0.15.9",
+]
