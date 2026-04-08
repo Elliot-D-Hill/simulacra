@@ -189,11 +189,10 @@ class Predictor(_HasFamily):
     ) -> Predictor:
         index = self._re_count
         W = W or dist.Dirichlet(torch.ones(levels))
-
         result = Predictor(
             _compose(
                 self._run,
-                lambda data: random_effects(data, index, levels, q, W, B, b),
+                lambda data: random_effects(data, levels, q, W, B, b, index),
             ),
             (*self._recipe, _label(random_effects, levels=levels, q=q, W=W, B=B, b=b)),
         )
