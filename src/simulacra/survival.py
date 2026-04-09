@@ -12,6 +12,8 @@ from .states import (
 )
 from .transforms import Prior, resolve
 
+INF: Tensor = torch.tensor(torch.inf)
+
 
 def competing_risks(
     data: ResponseData,
@@ -33,7 +35,7 @@ def censor(
     horizon: float | Tensor = torch.inf,
 ) -> tuple[SurvivalData, dict[str, Tensor]]:
     event_time = getattr(data, "event_time", data.y)
-    prior_censor = getattr(data, "censor_time", torch.full_like(data.y, torch.inf))
+    prior_censor = getattr(data, "censor_time", INF)
     if dropout is None:
         t_max = data.coordinates[..., -1:, :1].clamp(min=1.0)  # [*batch, N, 1, 1]
         dropout = dist.Uniform(torch.zeros(()), t_max)
