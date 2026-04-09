@@ -5,11 +5,7 @@ import torch
 import torch.distributions as dist
 from torch import Tensor
 
-from .states import (
-    InitialData,
-    PredictorData,
-    ResponseData,
-)
+from .states import InitialData, PredictorData, ResponseData
 
 type Prior = dist.Distribution | Tensor
 type FamilyFn = Callable[[PredictorData], tuple[ResponseData, dict[str, Tensor]]]
@@ -20,19 +16,22 @@ def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
         return prior
     suffix = len(prior.batch_shape) + len(prior.event_shape)
     sample_shape = shape[:-suffix] if suffix else shape
-    return prior.rsample(sample_shape) if prior.has_rsample else prior.sample(sample_shape)
+    return (
+        prior.rsample(sample_shape) if prior.has_rsample else prior.sample(sample_shape)
+    )
 
 
 def fixed_effects(
     data: InitialData, X: Prior, beta: Prior
 ) -> tuple[PredictorData, dict[str, Tensor]]:
-    X = resolve(X, (*data.draws, data.n, data.t, data.p))
-    beta = resolve(beta, (*data.draws, 1, data.p, data.k))
-    coordinates = torch.arange(data.t, dtype=X.dtype).unsqueeze(-1)  # [T, 1]
-    coordinates = coordinates.expand_as(X[..., :1])  # [*draws, N, T, 1]
+    basis = resolve(X, (*data.draws, data.n, data.t, data.p))
+    coefficients = resolve(beta, (*data.draws, 1, data.p, data.k))
+    eta = basis @ coefficients
+    coordinates = torch.arange(data.t, dtype=basis.dtype).unsqueeze(-1)  # [T, 1]
+    coordinates = coordinates.expand_as(basis[..., :1])  # [*draws, N, T, 1]
     return (
-        PredictorData(coordinates=coordinates, X=X, eta=X @ beta),
-        {"beta": beta.squeeze(-3)},
+        PredictorData(coordinates=coordinates, X=basis, eta=eta),
+        {"beta": coefficients.squeeze(-3)},
     )
 
 
@@ -42,11 +41,13 @@ def random_effects(
     *batch, n, t, k = data.eta.shape
     # design choice: T=1 implies membership is constant over time. For
     # non-constant longitudinal membership, a user must pass a custom W
-    W = resolve(W, (*batch, n, 1, levels))
-    B = resolve(B, (*batch, n, t, q))
-    b = resolve(b, (*batch, levels, q, k))
-    eta_re = torch.einsum("...ntl,...ntr,...lrk->...ntk", W, B, b)
-    params = {f"W_{index}": W, f"B_{index}": B, f"b_{index}": b}
+    membership = resolve(W, (*batch, n, 1, levels))
+    basis = resolve(B, (*batch, n, t, q))
+    coefficients = resolve(b, (*batch, levels, q, k))
+    eta_re = torch.einsum(
+        "...ntl,...ntr,...lrk->...ntk", membership, basis, coefficients
+    )
+    params = {f"W_{index}": membership, f"B_{index}": basis, f"b_{index}": coefficients}
     return replace(data, eta=data.eta + eta_re), params
 
 
@@ -69,10 +70,10 @@ def gaussian(
     data: PredictorData, covariance: Prior
 ) -> tuple[ResponseData, dict[str, Tensor]]:
     K = data.eta.shape[-1]
-    cov = resolve(covariance, (K, K))
-    if cov.ndim < 2:
-        cov = cov * torch.eye(K)
-    y = resolve(dist.MultivariateNormal(data.eta, cov))
+    covariance = resolve(covariance, (K, K))
+    if covariance.ndim < 2:
+        covariance = covariance * torch.eye(K)
+    y = resolve(dist.MultivariateNormal(data.eta, covariance))
     return ResponseData(**vars(data), y=y), {}
 
 

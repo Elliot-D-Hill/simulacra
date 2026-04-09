@@ -3,20 +3,11 @@ import torch.distributions as dist
 import torch.nn.functional as F
 from torch import Tensor
 
-from .states import (
-    DiscreteSurvivalData,
-    EventTimeData,
-    ResponseData,
-    SurvivalData,
-)
+from .states import DiscreteSurvivalData, EventTimeData, ResponseData, SurvivalData
 from .transforms import Prior, resolve
 
-INF: Tensor = torch.tensor(torch.inf)
 
-
-def competing_risks(
-    data: ResponseData,
-) -> tuple[EventTimeData, dict[str, Tensor]]:
+def competing_risks(data: ResponseData) -> tuple[EventTimeData, dict[str, Tensor]]:
     latent = data.y  # [N, T, K]
     min_time, min_idx = latent.min(dim=-1)  # [N, T]
     is_winner = F.one_hot(min_idx, latent.shape[-1]).bool()  # [N, T, K]
@@ -34,7 +25,7 @@ def censor(
     horizon: float | Tensor = torch.inf,
 ) -> tuple[SurvivalData, dict[str, Tensor]]:
     event_time = getattr(data, "event_time", data.y)
-    prior_censor = getattr(data, "censor_time", INF)
+    prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
     if dropout is None:
         t_max = data.coordinates[..., -1:, :1].clamp(min=1.0)  # [*batch, N, 1, 1]
         dropout = dist.Uniform(torch.zeros(()), t_max)

@@ -15,11 +15,7 @@ from .states import (
     ResponseData,
     SurvivalData,
 )
-from .survival import (
-    censor,
-    competing_risks,
-    discretize,
-)
+from .survival import censor, competing_risks, discretize
 from .transforms import (
     FamilyFn,
     Prior,
@@ -41,9 +37,9 @@ from .transforms import (
     weibull,
 )
 
-UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, 1.0)
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
-EXP1: Final[dist.Exponential] = dist.Exponential(torch.tensor(1.0))
+UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
+EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 type Run[S] = Callable[[tuple[int, ...]], tuple[S, dict[str, Tensor]]]
 
@@ -202,13 +198,12 @@ class Predictor(_HasFamily):
     ) -> Predictor:
         index = self._re_count
         # design choice: default to soft level assignments
-        W = W or dist.Dirichlet(torch.ones(levels))
+        w = W or dist.Dirichlet(torch.ones(levels))
         result = Predictor(
             _compose(
-                self._run,
-                lambda data: random_effects(data, levels, q, W, B, b, index),
+                self._run, lambda data: random_effects(data, levels, q, w, B, b, index)
             ),
-            (*self._recipe, _label(random_effects, levels=levels, q=q, W=W, B=B, b=b)),
+            (*self._recipe, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)),
         )
         result._re_count = index + 1
         return result
