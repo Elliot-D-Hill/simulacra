@@ -16,10 +16,9 @@ from .states import (
     SurvivalData,
 )
 from .survival import (
+    censor,
+    competing_risks,
     discretize,
-    event_time,
-    indicator,
-    recurrent_events,
 )
 from .transforms import (
     FamilyFn,
@@ -245,24 +244,28 @@ class Response(_HasY[ResponseData]): ...
 
 
 class WeibullResponse(_HasY[ResponseData]):
-    def event_time(self, horizon: float | Tensor = torch.inf) -> EventTime:
-        return EventTime(
-            _compose(self._run, lambda data: event_time(data, horizon)),
-            (*self._recipe, _label(event_time, horizon=horizon)),
+    def competing_risks(self) -> CompetingResponse:
+        return CompetingResponse(
+            _compose(self._run, competing_risks),
+            (*self._recipe, _label(competing_risks)),
         )
 
-    def recurrent_events(self, horizon: float | Tensor = torch.inf) -> EventTime:
-        return EventTime(
-            _compose(self._run, lambda data: recurrent_events(data, horizon)),
-            (*self._recipe, _label(recurrent_events, horizon=horizon)),
-        )
-
-
-class EventTime(_HasY[EventTimeData]):
-    def indicator(self) -> Survival:
+    def censor(
+        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
+    ) -> Survival:
         return Survival(
-            _compose(self._run, indicator),
-            (*self._recipe, _label(indicator)),
+            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
+            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
+        )
+
+
+class CompetingResponse(_HasY[EventTimeData]):
+    def censor(
+        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
+    ) -> Survival:
+        return Survival(
+            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
+            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
         )
 
 

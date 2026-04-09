@@ -18,8 +18,9 @@ type FamilyFn = Callable[[PredictorData], tuple[ResponseData, dict[str, Tensor]]
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
     if isinstance(prior, Tensor):
         return prior
-    shape = shape[: -len(prior.event_shape) or None]
-    return prior.rsample(shape) if prior.has_rsample else prior.sample(shape)
+    suffix = len(prior.batch_shape) + len(prior.event_shape)
+    sample_shape = shape[:-suffix] if suffix else shape
+    return prior.rsample(sample_shape) if prior.has_rsample else prior.sample(sample_shape)
 
 
 def fixed_effects(
