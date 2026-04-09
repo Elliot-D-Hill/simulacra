@@ -8,7 +8,6 @@ from .states import (
     EventTimeData,
     ResponseData,
     SurvivalData,
-    promote,
 )
 from .transforms import Prior, resolve
 
@@ -23,8 +22,8 @@ def competing_risks(
     is_winner = F.one_hot(min_idx, latent.shape[-1]).bool()  # [N, T, K]
     event_time = torch.where(is_winner, latent, torch.inf)
     censor_time = torch.where(is_winner, torch.inf, min_time.unsqueeze(-1))
-    return promote(
-        data, EventTimeData, event_time=event_time, censor_time=censor_time
+    return EventTimeData(
+        **vars(data), event_time=event_time, censor_time=censor_time
     ), {}
 
 
@@ -45,9 +44,8 @@ def censor(
     observed_time = torch.minimum(event_time, censor_time)
     indicator = (event_time < censor_time).to(event_time.dtype)
     time_to_event = observed_time - data.coordinates[..., :1]
-    return promote(
-        data,
-        SurvivalData,
+    return SurvivalData(
+        **vars(data),
         event_time=event_time,
         censor_time=censor_time,
         indicator=indicator,
@@ -68,4 +66,4 @@ def discretize(
     indicator = data.indicator.unsqueeze(-1).to(exposure.dtype)  # [..., K, 1]
     mask = indicator * in_interval.to(exposure.dtype) + (1.0 - indicator)
     discrete = exposure * mask  # [..., K, J]
-    return promote(data, DiscreteSurvivalData, discrete_event_time=discrete), {}
+    return DiscreteSurvivalData(**vars(data), discrete_event_time=discrete), {}

@@ -1,11 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Any
 
 from torch import Tensor
-
-
-def promote[T](data: object, cls: type[T], **kwargs: Any) -> T:
-    return cls(**{**vars(data), **kwargs})
 
 
 @dataclass(frozen=True)
