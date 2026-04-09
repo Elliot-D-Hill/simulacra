@@ -18,7 +18,8 @@ from .states import (
     ResponseData,
     SurvivalData,
 )
-from .transforms import Family, Prior, resolve
+from .families import Family
+from .transforms import Prior, resolve
 
 __all__ = [
     "ConstantPredictor",
