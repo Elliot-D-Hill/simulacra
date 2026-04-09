@@ -38,26 +38,23 @@ def test_response_methods(dims: tuple[int, int, int, int]) -> None:
     assert hasattr(resp, "missing_y")
 
 
-def test_event_time_methods(dims: tuple[int, int, int, int]) -> None:
-    """EventTime has X- and Y-transforms."""
+def test_weibull_response_methods(dims: tuple[int, int, int, int]) -> None:
+    """WeibullResponse has survival methods and X/Y-transforms."""
     N, T, p, k = dims
-    et = Simulation(N, T, p, k).fixed_effects().gaussian().event_time()
-    assert hasattr(et, "missing_x")
-    assert hasattr(et, "missing_y")
+    wr = Simulation(N, T, p, k).fixed_effects().weibull()
+    assert hasattr(wr, "competing_risks")
+    assert hasattr(wr, "censor")
+    assert hasattr(wr, "missing_x")
+    assert hasattr(wr, "missing_y")
 
 
-def test_censored_methods(dims: tuple[int, int, int, int]) -> None:
-    """Censored has X- and Y-transforms."""
+def test_survival_methods(dims: tuple[int, int, int, int]) -> None:
+    """Survival has X/Y-transforms and discretize."""
     N, T, p, k = dims
-    cens = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
-        .gaussian()
-        .event_time()
-        .censor_time(horizon=2.0)
-    )
-    assert hasattr(cens, "missing_x")
-    assert hasattr(cens, "missing_y")
+    surv = Simulation(N, T, p, k).fixed_effects().weibull().censor(horizon=2.0)
+    assert hasattr(surv, "missing_x")
+    assert hasattr(surv, "missing_y")
+    assert hasattr(surv, "discretize")
 
 
 def test_constant_predictor_methods(dims: tuple[int, int, int, int]) -> None:
@@ -104,19 +101,12 @@ def test_draws_shape(dims: tuple[int, int, int, int]) -> None:
     """draws=D adds a leading dimension to data and params."""
     N, T, p, k = dims
     D = 7
-    sim = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
-        .gaussian()
-        .event_time()
-        .censor_time(horizon=2.0)
-    )
+    sim = Simulation(N, T, p, k).fixed_effects().weibull().censor(horizon=2.0)
     data, params = sim.draw(seed=0, draws=D)
     assert data["X"].shape == (D, N, T, p)
     assert params["beta"].shape == (D, p, k)
     assert data["y"].shape == (D, N, T, k)
     assert data["event_time"].shape == (D, N, T, k)
-    assert data["censor_time"].shape == (D, N, T, k)
 
 
 def test_draws_independent(dims: tuple[int, int, int, int]) -> None:
@@ -125,9 +115,8 @@ def test_draws_independent(dims: tuple[int, int, int, int]) -> None:
     data, _ = (
         Simulation(N, T, p, k)
         .fixed_effects()
-        .gaussian()
-        .event_time()
-        .censor_time(horizon=2.0)
+        .weibull()
+        .censor(horizon=2.0)
         .draw(seed=0, draws=7)
     )
     assert not data["y"][0].equal(data["y"][1])
@@ -139,9 +128,8 @@ def test_draws_none_base_shape(dims: tuple[int, int, int, int]) -> None:
     data, _ = (
         Simulation(N, T, p, k)
         .fixed_effects()
-        .gaussian()
-        .event_time()
-        .censor_time(horizon=2.0)
+        .weibull()
+        .censor(horizon=2.0)
         .draw(seed=0)
     )
     assert data["y"].shape == (N, T, k)
@@ -161,10 +149,9 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
     data, params = (
         Simulation(N, T, p, k)
         .fixed_effects()
-        .gaussian()
+        .weibull(shape=1.5)
+        .censor(horizon=3.0)
         .missing_y(0.2)
-        .event_time(shape=1.5)
-        .censor_time(horizon=3.0)
         .tokenize(vocab_size=50)
         .missing_x(0.2)
         .draw(seed=1)
