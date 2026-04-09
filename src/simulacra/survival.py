@@ -1,6 +1,3 @@
-from dataclasses import replace
-from functools import singledispatch
-
 import torch
 import torch.distributions as dist
 import torch.nn.functional as F
@@ -29,42 +26,28 @@ def competing_risks(
     ), {}
 
 
-@singledispatch
 def censor(
     data: ResponseData,
     dropout: Prior | None = None,
     *,
     horizon: float | Tensor = torch.inf,
 ) -> tuple[SurvivalData, dict[str, Tensor]]:
-    event_data = promote(
-        data,
-        EventTimeData,
-        event_time=data.y,
-        censor_time=torch.full_like(data.y, torch.inf),
-    )
-    return censor(event_data, dropout, horizon=horizon)
-
-
-@censor.register(EventTimeData)
-def censor_event_time(
-    data: EventTimeData,
-    dropout: Prior | None = None,
-    *,
-    horizon: float | Tensor = torch.inf,
-) -> tuple[SurvivalData, dict[str, Tensor]]:
+    event_time = getattr(data, "event_time", data.y)
+    prior_censor = getattr(data, "censor_time", torch.full_like(data.y, torch.inf))
     if dropout is None:
         t_max = data.coordinates[..., -1:, :1].clamp(min=1.0)  # [*batch, N, 1, 1]
         dropout = dist.Uniform(torch.zeros(()), t_max)
-    absolute = resolve(dropout, (*data.event_time.shape[:-2], 1, 1))
+    absolute = resolve(dropout, (*event_time.shape[:-2], 1, 1))
     rolling = data.coordinates[..., :1] + horizon  # [*batch, N, T, 1]
-    censor_time = torch.minimum(data.censor_time, absolute)
-    censor_time = torch.minimum(censor_time, rolling)
-    observed_time = torch.minimum(data.event_time, censor_time)
-    indicator = (data.event_time < censor_time).to(data.event_time.dtype)
+    censor_time = torch.minimum(torch.minimum(prior_censor, absolute), rolling)
+    observed_time = torch.minimum(event_time, censor_time)
+    indicator = (event_time < censor_time).to(event_time.dtype)
     time_to_event = observed_time - data.coordinates[..., :1]
     return promote(
-        replace(data, censor_time=censor_time),
+        data,
         SurvivalData,
+        event_time=event_time,
+        censor_time=censor_time,
         indicator=indicator,
         observed_time=observed_time,
         time_to_event=time_to_event,
