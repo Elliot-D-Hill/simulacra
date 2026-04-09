@@ -4,10 +4,10 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from .states import DiscreteSurvivalData, EventTimeData, ResponseData, SurvivalData
-from .transforms import Prior, resolve
+from .transforms import Params, Prior, resolve
 
 
-def competing_risks(data: ResponseData) -> tuple[EventTimeData, dict[str, Tensor]]:
+def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:
     latent = data.y  # [N, T, K]
     min_time, min_idx = latent.min(dim=-1)  # [N, T]
     is_winner = F.one_hot(min_idx, latent.shape[-1]).bool()  # [N, T, K]
@@ -23,7 +23,7 @@ def censor(
     dropout: Prior | None = None,
     *,
     horizon: float | Tensor = torch.inf,
-) -> tuple[SurvivalData, dict[str, Tensor]]:
+) -> tuple[SurvivalData, Params]:
     event_time = getattr(data, "event_time", data.y)
     prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
     if dropout is None:
@@ -47,7 +47,7 @@ def censor(
 
 def discretize(
     data: SurvivalData, boundaries: Tensor
-) -> tuple[DiscreteSurvivalData, dict[str, Tensor]]:
+) -> tuple[DiscreteSurvivalData, Params]:
     interval_start = boundaries[:-1]  # [J]
     interval_end = boundaries[1:]  # [J]
     interval_width = interval_end - interval_start  # [J]
