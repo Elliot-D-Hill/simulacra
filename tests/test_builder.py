@@ -38,14 +38,43 @@ def test_response_methods(dims: tuple[int, int, int, int]) -> None:
     assert hasattr(resp, "missing_y")
 
 
-def test_weibull_response_methods(dims: tuple[int, int, int, int]) -> None:
-    """WeibullResponse has survival methods and X/Y-transforms."""
+def test_positive_support_response_methods(dims: tuple[int, int, int, int]) -> None:
+    """PositiveSupportResponse has survival methods and X/Y-transforms."""
     N, T, p, k = dims
-    wr = Simulation(N, T, p, k).fixed_effects().weibull()
-    assert hasattr(wr, "competing_risks")
-    assert hasattr(wr, "censor")
-    assert hasattr(wr, "missing_x")
-    assert hasattr(wr, "missing_y")
+    resp = Simulation(N, T, p, k).fixed_effects().weibull()
+    assert hasattr(resp, "competing_risks")
+    assert hasattr(resp, "censor")
+    assert hasattr(resp, "missing_x")
+    assert hasattr(resp, "missing_y")
+
+
+def test_all_positive_support_families_have_survival_methods(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """All positive-support families expose censor and competing_risks."""
+    N, T, p, k = dims
+    base = Simulation(N, T, p, k).fixed_effects()
+    families = [
+        base.gamma(concentration=2.0),
+        base.log_normal(),
+        base.weibull(),
+        base.exponential(),
+        base.log_logistic(),
+        base.gompertz(),
+    ]
+    for resp in families:
+        assert hasattr(resp, "competing_risks")
+        assert hasattr(resp, "censor")
+
+
+def test_general_response_lacks_survival_methods(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """General families do not expose survival methods."""
+    N, T, p, k = dims
+    resp = Simulation(N, T, p, k).fixed_effects().gaussian()
+    assert not hasattr(resp, "competing_risks")
+    assert not hasattr(resp, "censor")
 
 
 def test_survival_methods(dims: tuple[int, int, int, int]) -> None:

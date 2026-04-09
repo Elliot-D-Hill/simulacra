@@ -8,7 +8,7 @@ from .builder import (
     Response,
     Simulation,
     Survival,
-    WeibullResponse,
+    PositiveSupportResponse,
 )
 from .states import (
     DiscreteSurvivalData,
@@ -18,7 +18,7 @@ from .states import (
     ResponseData,
     SurvivalData,
 )
-from .transforms import FamilyFn, Prior, resolve
+from .transforms import Family, Prior, resolve
 
 __all__ = [
     "ConstantPredictor",
@@ -26,7 +26,7 @@ __all__ = [
     "DiscreteSurvivalData",
     "CompetingResponse",
     "EventTimeData",
-    "FamilyFn",
+    "Family",
     "InitialData",
     "Predictor",
     "PredictorData",
@@ -38,6 +38,6 @@ __all__ = [
     "SurvivalData",
     "UNIT_NORMAL",
     "UNIT_VARIANCE",
-    "WeibullResponse",
+    "PositiveSupportResponse",
     "resolve",
 ]

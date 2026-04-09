@@ -43,6 +43,56 @@ def test_event_time(dims: tuple[int, int, int, int]) -> None:
     assert (data["y"] > 0).all()
 
 
+def test_log_logistic_event_time(dims: tuple[int, int, int, int]) -> None:
+    """Log-logistic produces positive event times with correct shape."""
+    N, T, p, k = dims
+    data, _ = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .log_logistic(shape=2.0)
+        .draw(seed=1)
+    )
+    assert data["y"].shape == (N, T, k)
+    assert (data["y"] > 0).all()
+
+
+def test_gompertz_event_time(dims: tuple[int, int, int, int]) -> None:
+    """Gompertz produces positive event times with correct shape."""
+    N, T, p, k = dims
+    data, _ = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .gompertz(shape=0.5)
+        .draw(seed=1)
+    )
+    assert data["y"].shape == (N, T, k)
+    assert (data["y"] > 0).all()
+
+
+def test_exponential_equals_weibull_shape_one(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """Exponential is Weibull with shape=1."""
+    N, T, p, k = dims
+    d1, _ = Simulation(N, T, p, k).fixed_effects().exponential().draw(seed=42)
+    d2, _ = Simulation(N, T, p, k).fixed_effects().weibull(shape=1.0).draw(seed=42)
+    assert d1["y"].equal(d2["y"])
+
+
+def test_gamma_survival_pipeline(dims: tuple[int, int, int, int]) -> None:
+    """Gamma response works through the full survival pipeline."""
+    N, T, p, k = dims
+    data, _ = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .gamma(concentration=2.0)
+        .censor(horizon=2.0)
+        .draw(seed=1)
+    )
+    assert "indicator" in data
+    assert "time_to_event" in data
+
+
 def test_censor_time(dims: tuple[int, int, int, int]) -> None:
     """censor bounds observed times relative to coordinates plus horizon."""
     N, T, p, k = dims

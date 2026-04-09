@@ -8,7 +8,7 @@ from torch import Tensor
 from .states import InitialData, PredictorData, ResponseData
 
 type Prior = dist.Distribution | Tensor
-type FamilyFn = Callable[[PredictorData], tuple[ResponseData, dict[str, Tensor]]]
+type Family = Callable[[PredictorData], tuple[ResponseData, dict[str, Tensor]]]
 
 
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
@@ -123,6 +123,24 @@ def weibull(
 ) -> tuple[ResponseData, dict[str, Tensor]]:
     scale = data.eta.exp().reciprocal()
     y = resolve(dist.Weibull(scale, shape))
+    return ResponseData(**vars(data), y=y), {}
+
+
+def log_logistic(
+    data: PredictorData, shape: float | Tensor
+) -> tuple[ResponseData, dict[str, Tensor]]:
+    scale = data.eta.exp().reciprocal()
+    u = torch.rand_like(data.eta)
+    y = scale * (u / (1.0 - u)).pow(1.0 / shape)
+    return ResponseData(**vars(data), y=y), {}
+
+
+def gompertz(
+    data: PredictorData, shape: float | Tensor
+) -> tuple[ResponseData, dict[str, Tensor]]:
+    rate = data.eta.exp()
+    u = torch.rand_like(data.eta)
+    y = (1.0 / shape) * torch.log1p(-shape * u.log() / rate)
     return ResponseData(**vars(data), y=y), {}
 
 

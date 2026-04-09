@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Final, Self
+from typing import Final, Self, overload
 
 import torch
 import torch.distributions as dist
@@ -17,7 +17,7 @@ from .states import (
 )
 from .survival import censor, competing_risks, discretize
 from .transforms import (
-    FamilyFn,
+    Family,
     Prior,
     bernoulli,
     binomial,
@@ -26,6 +26,8 @@ from .transforms import (
     fixed_effects,
     gamma,
     gaussian,
+    gompertz,
+    log_logistic,
     log_normal,
     missing_x,
     missing_y,
@@ -103,6 +105,33 @@ class _HasX[S: PredictorData](_Step[S]):
         return dict(td.squeeze(-1)), params
 
 
+class _HasY[S: ResponseData](_HasX[S]):
+    def missing_y(self, proportion: float) -> Self:
+        return type(self)(
+            _compose(self._run, lambda data: missing_y(data, proportion)),
+            (*self._recipe, _label(missing_y, proportion=proportion)),
+        )
+
+
+class Response(_HasY[ResponseData]): ...
+
+
+class PositiveSupportResponse(_HasY[ResponseData]):
+    def competing_risks(self) -> CompetingResponse:
+        return CompetingResponse(
+            _compose(self._run, competing_risks),
+            (*self._recipe, _label(competing_risks)),
+        )
+
+    def censor(
+        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
+    ) -> Survival:
+        return Survival(
+            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
+            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
+        )
+
+
 def _identity[T](x: T) -> T:
     return x
 
@@ -112,13 +141,24 @@ class _HasFamily(_HasX[PredictorData]):
         self,
         run: Run[PredictorData],
         recipe: tuple[str, ...] = (),
-        wrap: Callable[[FamilyFn], FamilyFn] = _identity,
+        wrap: Callable[[Family], Family] = _identity,
     ) -> None:
         super().__init__(run, recipe)
         self._wrap = wrap
 
-    def _apply(self, family: FamilyFn, label: str) -> Response:
-        return Response(_compose(self._run, self._wrap(family)), (*self._recipe, label))
+    @overload
+    def _apply(self, family: Family, label: str) -> Response: ...
+    @overload
+    def _apply(
+        self, family: Family, label: str, cls: type[PositiveSupportResponse]
+    ) -> PositiveSupportResponse: ...
+    def _apply(
+        self,
+        family: Family,
+        label: str,
+        cls: type[_HasY[ResponseData]] = Response,
+    ) -> _HasY[ResponseData]:
+        return cls(_compose(self._run, self._wrap(family)), (*self._recipe, label))
 
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
         return self._apply(
@@ -144,24 +184,49 @@ class _HasFamily(_HasX[PredictorData]):
             _label(negative_binomial, concentration=concentration),
         )
 
-    def gamma(self, concentration: float | Tensor) -> Response:
-        return self._apply(
-            lambda data: gamma(data, concentration),
-            _label(gamma, concentration=concentration),
-        )
-
-    def log_normal(self, std: float | Tensor = 1.0) -> Response:
-        return self._apply(
-            lambda data: log_normal(data, std), _label(log_normal, std=std)
-        )
-
     def categorical(self) -> Response:
         return self._apply(categorical, _label(categorical))
 
-    def weibull(self, shape: float | Tensor = 1.0) -> WeibullResponse:
-        return WeibullResponse(
-            _compose(self._run, self._wrap(lambda data: weibull(data, shape))),
-            (*self._recipe, _label(weibull, shape=shape)),
+    def gamma(self, concentration: float | Tensor) -> PositiveSupportResponse:
+        return self._apply(
+            lambda data: gamma(data, concentration),
+            _label(gamma, concentration=concentration),
+            PositiveSupportResponse,
+        )
+
+    def log_normal(self, std: float | Tensor = 1.0) -> PositiveSupportResponse:
+        return self._apply(
+            lambda data: log_normal(data, std),
+            _label(log_normal, std=std),
+            PositiveSupportResponse,
+        )
+
+    def weibull(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
+        return self._apply(
+            lambda data: weibull(data, shape),
+            _label(weibull, shape=shape),
+            PositiveSupportResponse,
+        )
+
+    def exponential(self) -> PositiveSupportResponse:
+        return self._apply(
+            lambda data: weibull(data, 1.0),
+            _label(weibull, shape=1.0),
+            PositiveSupportResponse,
+        )
+
+    def log_logistic(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
+        return self._apply(
+            lambda data: log_logistic(data, shape),
+            _label(log_logistic, shape=shape),
+            PositiveSupportResponse,
+        )
+
+    def gompertz(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
+        return self._apply(
+            lambda data: gompertz(data, shape),
+            _label(gompertz, shape=shape),
+            PositiveSupportResponse,
         )
 
 
@@ -224,33 +289,6 @@ class ConstantPredictor(_HasFamily):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
         super().__init__(
             run, recipe, wrap=lambda f: lambda data: constant_target(data, f)
-        )
-
-
-class _HasY[S: ResponseData](_HasX[S]):
-    def missing_y(self, proportion: float) -> Self:
-        return type(self)(
-            _compose(self._run, lambda data: missing_y(data, proportion)),
-            (*self._recipe, _label(missing_y, proportion=proportion)),
-        )
-
-
-class Response(_HasY[ResponseData]): ...
-
-
-class WeibullResponse(_HasY[ResponseData]):
-    def competing_risks(self) -> CompetingResponse:
-        return CompetingResponse(
-            _compose(self._run, competing_risks),
-            (*self._recipe, _label(competing_risks)),
-        )
-
-    def censor(
-        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
-    ) -> Survival:
-        return Survival(
-            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
-            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
         )
 
 
