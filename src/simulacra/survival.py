@@ -24,7 +24,9 @@ def competing_risks(
     is_winner = F.one_hot(min_idx, latent.shape[-1]).bool()  # [N, T, K]
     event_time = torch.where(is_winner, latent, torch.inf)
     censor_time = torch.where(is_winner, torch.inf, min_time.unsqueeze(-1))
-    return promote(data, EventTimeData, event_time=event_time, censor_time=censor_time), {}
+    return promote(
+        data, EventTimeData, event_time=event_time, censor_time=censor_time
+    ), {}
 
 
 @singledispatch
@@ -44,7 +46,7 @@ def censor(
 
 
 @censor.register(EventTimeData)
-def _censor_event_time(
+def censor_event_time(
     data: EventTimeData,
     dropout: Prior | None = None,
     *,
@@ -78,7 +80,7 @@ def discretize(
     tte = data.time_to_event.unsqueeze(-1)  # [..., K, 1]
     exposure = ((tte - interval_start) / interval_width).clamp(0, 1)
     in_interval = (tte > interval_start) & (tte <= interval_end)
-    ind = data.indicator.unsqueeze(-1).to(exposure.dtype)  # [..., K, 1]
-    mask = ind * in_interval.to(exposure.dtype) + (1.0 - ind)
+    indicator = data.indicator.unsqueeze(-1).to(exposure.dtype)  # [..., K, 1]
+    mask = indicator * in_interval.to(exposure.dtype) + (1.0 - indicator)
     discrete = exposure * mask  # [..., K, J]
     return promote(data, DiscreteSurvivalData, discrete_event_time=discrete), {}
