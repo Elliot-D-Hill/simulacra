@@ -8,11 +8,18 @@ from tensordict import TensorDict
 from torch import Tensor
 
 from .states import (
-    CensoredData,
+    DiscreteSurvivalData,
     EventTimeData,
     InitialData,
     PredictorData,
     ResponseData,
+    SurvivalData,
+)
+from .survival import (
+    discretize,
+    event_time,
+    indicator,
+    recurrent_events,
 )
 from .transforms import (
     FamilyFn,
@@ -20,9 +27,7 @@ from .transforms import (
     bernoulli,
     binomial,
     categorical,
-    censor_time,
     constant_target,
-    event_time,
     fixed_effects,
     gamma,
     gaussian,
@@ -30,13 +35,16 @@ from .transforms import (
     missing_x,
     missing_y,
     negative_binomial,
+    points,
     poisson,
     random_effects,
     tokenize,
+    weibull,
 )
 
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, 1.0)
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
+_EXP1: Final[dist.Exponential] = dist.Exponential(torch.tensor(1.0))
 
 type Run[S] = Callable[[tuple[int, ...]], tuple[S, dict[str, Tensor]]]
 
@@ -97,7 +105,7 @@ class _HasX[S: PredictorData](_Step[S]):
         n, t = data.X.shape[-3], data.X.shape[-2]
         td = TensorDict(tensor_data, batch_size=(*batch, n, t))
         # TODO: casting to dict is a patch due to TensorDict poor access typing
-        return dict(td.squeeze(-2)), params
+        return dict(td.squeeze(-1)), params
 
 
 def _identity[T](x: T) -> T:
@@ -155,6 +163,12 @@ class _HasFamily(_HasX[PredictorData]):
     def categorical(self) -> Response:
         return self._apply(categorical, _label(categorical))
 
+    def weibull(self, shape: float | Tensor = 1.0) -> WeibullResponse:
+        return WeibullResponse(
+            _compose(self._run, self._wrap(lambda data: weibull(data, shape))),
+            (*self._recipe, _label(weibull, shape=shape)),
+        )
+
 
 class Simulation(_Step[InitialData]):
     def __init__(self, n: int, t: int, p: int, k: int) -> None:
@@ -203,6 +217,14 @@ class Predictor(_HasFamily):
     def constant_target(self) -> ConstantPredictor:
         return ConstantPredictor(self._run, (*self._recipe, _label(constant_target)))
 
+    def points(self, coordinates: Prior = _EXP1) -> Predictor:
+        result = Predictor(
+            _compose(self._run, lambda data: points(data, coordinates)),
+            (*self._recipe, _label(points, coordinates=coordinates)),
+        )
+        result._re_count = self._re_count
+        return result
+
 
 class ConstantPredictor(_HasFamily):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
@@ -219,20 +241,39 @@ class _HasY[S: ResponseData](_HasX[S]):
         )
 
 
-class Response(_HasY[ResponseData]):
-    def event_time(self, shape: float | Tensor = 1.0) -> EventTime:
+class Response(_HasY[ResponseData]): ...
+
+
+class WeibullResponse(_HasY[ResponseData]):
+    def event_time(self, horizon: float | Tensor = torch.inf) -> EventTime:
         return EventTime(
-            _compose(self._run, lambda data: event_time(data, shape)),
-            (*self._recipe, _label(event_time, shape=shape)),
+            _compose(self._run, lambda data: event_time(data, horizon)),
+            (*self._recipe, _label(event_time, horizon=horizon)),
+        )
+
+    def recurrent_events(
+        self, horizon: float | Tensor = torch.inf
+    ) -> EventTime:
+        return EventTime(
+            _compose(self._run, lambda data: recurrent_events(data, horizon)),
+            (*self._recipe, _label(recurrent_events, horizon=horizon)),
         )
 
 
 class EventTime(_HasY[EventTimeData]):
-    def censor_time(self, horizon: float | Tensor) -> Censored:
-        return Censored(
-            _compose(self._run, lambda data: censor_time(data, horizon)),
-            (*self._recipe, _label(censor_time, horizon=horizon)),
+    def indicator(self) -> Survival:
+        return Survival(
+            _compose(self._run, indicator),
+            (*self._recipe, _label(indicator)),
         )
 
 
-class Censored(_HasY[CensoredData]): ...
+class Survival(_HasY[SurvivalData]):
+    def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
+        return DiscreteSurvival(
+            _compose(self._run, lambda data: discretize(data, boundaries)),
+            (*self._recipe, _label(discretize, boundaries=boundaries)),
+        )
+
+
+class DiscreteSurvival(_HasY[DiscreteSurvivalData]): ...

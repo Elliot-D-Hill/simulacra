@@ -6,8 +6,6 @@ import torch.distributions as dist
 from torch import Tensor
 
 from .states import (
-    CensoredData,
-    EventTimeData,
     InitialData,
     PredictorData,
     ResponseData,
@@ -29,7 +27,12 @@ def fixed_effects(
 ) -> tuple[PredictorData, dict[str, Tensor]]:
     X = resolve(X, (*data.draws, data.n, data.t, data.p))
     beta = resolve(beta, (*data.draws, 1, data.p, data.k))
-    return PredictorData(X=X, eta=X @ beta), {"beta": beta.squeeze(-3)}
+    coordinates = torch.arange(data.t, dtype=X.dtype).unsqueeze(-1)  # [T, 1]
+    coordinates = coordinates.expand_as(X[..., :1])  # [*draws, N, T, 1]
+    return (
+        PredictorData(coordinates=coordinates, X=X, eta=X @ beta),
+        {"beta": beta.squeeze(-3)},
+    )
 
 
 def random_effects(
@@ -44,6 +47,21 @@ def random_effects(
     eta_re = torch.einsum("...ntl,...ntr,...lrk->...ntk", W, B, b)
     params = {f"W_{index}": W, f"B_{index}": B, f"b_{index}": b}
     return replace(data, eta=data.eta + eta_re), params
+
+
+def points(
+    data: PredictorData, coordinates: Prior
+) -> tuple[PredictorData, dict[str, Tensor]]:
+    n, t = data.X.shape[-3], data.X.shape[-2]
+    match coordinates:
+        case Tensor():
+            if coordinates.ndim == 1:
+                coordinates = coordinates.unsqueeze(-1)  # [T] -> [T, 1]
+            coords = coordinates.expand(n, t, -1)
+        case dist.Distribution():
+            increments = resolve(coordinates, (n, t))
+            coords = increments.cumsum(dim=-1).unsqueeze(-1)  # [N, T, 1]
+    return replace(data, coordinates=coords), {}
 
 
 def gaussian(
@@ -98,19 +116,12 @@ def categorical(data: PredictorData) -> tuple[ResponseData, dict[str, Tensor]]:
     return ResponseData(**vars(data), y=y), {}
 
 
-def event_time(
-    data: ResponseData, shape: float | Tensor
-) -> tuple[EventTimeData, dict[str, Tensor]]:
+def weibull(
+    data: PredictorData, shape: float | Tensor
+) -> tuple[ResponseData, dict[str, Tensor]]:
     scale = data.eta.exp().reciprocal()
-    event_time = resolve(dist.Weibull(scale, shape))
-    return EventTimeData(**vars(data), event_time=event_time), {}
-
-
-def censor_time(
-    data: EventTimeData, horizon: float | Tensor
-) -> tuple[CensoredData, dict[str, Tensor]]:
-    clamped = torch.clamp(data.event_time, max=horizon)
-    return CensoredData(**vars(data), censor_time=clamped), {}
+    y = resolve(dist.Weibull(scale, shape))
+    return ResponseData(**vars(data), y=y), {}
 
 
 def constant_target(

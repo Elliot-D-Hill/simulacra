@@ -1,26 +1,29 @@
 from .builder import (
     UNIT_NORMAL,
     UNIT_VARIANCE,
-    Censored,
     ConstantPredictor,
+    DiscreteSurvival,
     EventTime,
     Predictor,
     Response,
     Simulation,
+    Survival,
+    WeibullResponse,
 )
 from .states import (
-    CensoredData,
+    DiscreteSurvivalData,
     EventTimeData,
     InitialData,
     PredictorData,
     ResponseData,
+    SurvivalData,
 )
 from .transforms import FamilyFn, Prior, resolve
 
 __all__ = [
-    "Censored",
-    "CensoredData",
     "ConstantPredictor",
+    "DiscreteSurvival",
+    "DiscreteSurvivalData",
     "EventTime",
     "EventTimeData",
     "FamilyFn",
@@ -31,7 +34,10 @@ __all__ = [
     "Response",
     "ResponseData",
     "Simulation",
+    "Survival",
+    "SurvivalData",
     "UNIT_NORMAL",
     "UNIT_VARIANCE",
+    "WeibullResponse",
     "resolve",
 ]

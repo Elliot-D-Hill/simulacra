@@ -14,6 +14,7 @@ class InitialData:
 
 @dataclass(frozen=True)
 class PredictorData:
+    coordinates: Tensor  # [N, T, D]
     X: Tensor  # [N, T, p]
     eta: Tensor  # [N, T, K]
     tokens: Tensor | None = None  # [N, T]
@@ -27,8 +28,16 @@ class ResponseData(PredictorData):
 @dataclass(frozen=True)
 class EventTimeData(ResponseData):
     event_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
+    censor_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
 
 
 @dataclass(frozen=True)
-class CensoredData(EventTimeData):
-    censor_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
+class SurvivalData(EventTimeData):
+    indicator: Tensor = field(default_factory=Tensor)  # [N, T, K]
+    observed_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
+    time_to_event: Tensor = field(default_factory=Tensor)  # [N, T, K]
+
+
+@dataclass(frozen=True)
+class DiscreteSurvivalData(SurvivalData):
+    discrete_event_time: Tensor = field(default_factory=Tensor)  # [N, T, K, J]
