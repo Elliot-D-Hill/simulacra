@@ -188,6 +188,7 @@ class Predictor(_HasFamily):
         b: Prior = UNIT_NORMAL,
     ) -> Predictor:
         index = self._re_count
+        # design choice: default to soft level assignments
         W = W or dist.Dirichlet(torch.ones(levels))
         result = Predictor(
             _compose(

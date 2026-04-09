@@ -36,8 +36,8 @@ def random_effects(
     data: PredictorData, levels: int, q: int, W: Prior, B: Prior, b: Prior, index: int
 ) -> tuple[PredictorData, dict[str, Tensor]]:
     *batch, n, t, k = data.eta.shape
-    # design choice: T=1 implies membership is constant over time
-    # for non-constant longitudinal membership pass a custom W
+    # design choice: T=1 implies membership is constant over time. For
+    # non-constant longitudinal membership, a user must pass a custom W
     W = resolve(W, (*batch, n, 1, levels))
     B = resolve(B, (*batch, n, t, q))
     b = resolve(b, (*batch, levels, q, k))
