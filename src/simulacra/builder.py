@@ -44,7 +44,7 @@ from .transforms import (
 
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, 1.0)
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
-_EXP1: Final[dist.Exponential] = dist.Exponential(torch.tensor(1.0))
+EXP1: Final[dist.Exponential] = dist.Exponential(torch.tensor(1.0))
 
 type Run[S] = Callable[[tuple[int, ...]], tuple[S, dict[str, Tensor]]]
 
@@ -217,7 +217,7 @@ class Predictor(_HasFamily):
     def constant_target(self) -> ConstantPredictor:
         return ConstantPredictor(self._run, (*self._recipe, _label(constant_target)))
 
-    def points(self, coordinates: Prior = _EXP1) -> Predictor:
+    def points(self, coordinates: Prior = EXP1) -> Predictor:
         result = Predictor(
             _compose(self._run, lambda data: points(data, coordinates)),
             (*self._recipe, _label(points, coordinates=coordinates)),
@@ -251,9 +251,7 @@ class WeibullResponse(_HasY[ResponseData]):
             (*self._recipe, _label(event_time, horizon=horizon)),
         )
 
-    def recurrent_events(
-        self, horizon: float | Tensor = torch.inf
-    ) -> EventTime:
+    def recurrent_events(self, horizon: float | Tensor = torch.inf) -> EventTime:
         return EventTime(
             _compose(self._run, lambda data: recurrent_events(data, horizon)),
             (*self._recipe, _label(recurrent_events, horizon=horizon)),
