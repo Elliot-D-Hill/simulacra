@@ -25,8 +25,8 @@ def event_time(
 def recurrent_events(
     data: ResponseData, horizon: float | Tensor = torch.inf
 ) -> tuple[EventTimeData, dict[str, Tensor]]:
-    max_coord = data.coordinates[..., :1].max()
-    censor = torch.full_like(data.y, max_coord.item())
+    end_of_window = data.coordinates[..., -1:, :1]  # [N, 1, 1]
+    censor = end_of_window.expand_as(data.y)
     censor = torch.minimum(censor, data.coordinates[..., :1] + horizon)
     return EventTimeData(**vars(data), event_time=data.y, censor_time=censor), {}
 
