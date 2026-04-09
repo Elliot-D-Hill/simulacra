@@ -1,3 +1,6 @@
+from dataclasses import replace
+from functools import singledispatch
+
 import torch
 import torch.distributions as dist
 import torch.nn.functional as F
@@ -8,6 +11,7 @@ from .states import (
     EventTimeData,
     ResponseData,
     SurvivalData,
+    promote,
 )
 from .transforms import Prior, resolve
 
@@ -18,37 +22,48 @@ def competing_risks(
     latent = data.y  # [N, T, K]
     min_time, min_idx = latent.min(dim=-1)  # [N, T]
     is_winner = F.one_hot(min_idx, latent.shape[-1]).bool()  # [N, T, K]
-    event = torch.where(is_winner, latent, torch.inf)
-    censor = torch.where(is_winner, torch.inf, min_time.unsqueeze(-1))
-    return EventTimeData(**vars(data), event_time=event, censor_time=censor), {}
+    event_time = torch.where(is_winner, latent, torch.inf)
+    censor_time = torch.where(is_winner, torch.inf, min_time.unsqueeze(-1))
+    return promote(data, EventTimeData, event_time=event_time, censor_time=censor_time), {}
 
 
+@singledispatch
 def censor(
     data: ResponseData,
     dropout: Prior | None = None,
     *,
     horizon: float | Tensor = torch.inf,
 ) -> tuple[SurvivalData, dict[str, Tensor]]:
-    if not isinstance(data, EventTimeData):
-        data = EventTimeData(
-            **vars(data),
-            event_time=data.y,
-            censor_time=torch.full_like(data.y, torch.inf),
-        )
+    event_data = promote(
+        data,
+        EventTimeData,
+        event_time=data.y,
+        censor_time=torch.full_like(data.y, torch.inf),
+    )
+    return censor(event_data, dropout, horizon=horizon)
+
+
+@censor.register(EventTimeData)
+def _censor_event_time(
+    data: EventTimeData,
+    dropout: Prior | None = None,
+    *,
+    horizon: float | Tensor = torch.inf,
+) -> tuple[SurvivalData, dict[str, Tensor]]:
     if dropout is None:
         t_max = data.coordinates[..., -1:, :1].clamp(min=1.0)  # [*batch, N, 1, 1]
         dropout = dist.Uniform(torch.zeros(()), t_max)
     absolute = resolve(dropout, (*data.event_time.shape[:-2], 1, 1))
     rolling = data.coordinates[..., :1] + horizon  # [*batch, N, T, 1]
-    ct = torch.minimum(data.censor_time, absolute)
-    ct = torch.minimum(ct, rolling)
-    coords = data.coordinates[..., :1]  # [N, T, 1]
-    observed_time = torch.minimum(data.event_time, ct)
-    ind = (data.event_time < ct).to(data.event_time.dtype)
-    time_to_event = observed_time - coords
-    return SurvivalData(
-        **{**vars(data), "censor_time": ct},
-        indicator=ind,
+    censor_time = torch.minimum(data.censor_time, absolute)
+    censor_time = torch.minimum(censor_time, rolling)
+    observed_time = torch.minimum(data.event_time, censor_time)
+    indicator = (data.event_time < censor_time).to(data.event_time.dtype)
+    time_to_event = observed_time - data.coordinates[..., :1]
+    return promote(
+        replace(data, censor_time=censor_time),
+        SurvivalData,
+        indicator=indicator,
         observed_time=observed_time,
         time_to_event=time_to_event,
     ), {}
@@ -60,10 +75,10 @@ def discretize(
     interval_start = boundaries[:-1]  # [J]
     interval_end = boundaries[1:]  # [J]
     interval_width = interval_end - interval_start  # [J]
-    time_to_event = data.time_to_event.unsqueeze(-1)  # [..., K, 1]
-    exposure = ((time_to_event - interval_start) / interval_width).clamp(0, 1)
-    in_interval = (time_to_event > interval_start) & (time_to_event <= interval_end)
+    tte = data.time_to_event.unsqueeze(-1)  # [..., K, 1]
+    exposure = ((tte - interval_start) / interval_width).clamp(0, 1)
+    in_interval = (tte > interval_start) & (tte <= interval_end)
     ind = data.indicator.unsqueeze(-1).to(exposure.dtype)  # [..., K, 1]
     mask = ind * in_interval.to(exposure.dtype) + (1.0 - ind)
     discrete = exposure * mask  # [..., K, J]
-    return DiscreteSurvivalData(**vars(data), discrete_event_time=discrete), {}
+    return promote(data, DiscreteSurvivalData, discrete_event_time=discrete), {}
