@@ -71,7 +71,11 @@ def _compose[S, T](
     return run
 
 
-class _Step[S]:
+def _identity[T](x: T) -> T:
+    return x
+
+
+class _Pipeline[S: PredictorData]:
     def __init__(self, run: Run[S], recipe: tuple[str, ...] = ()) -> None:
         self._run = run
         self._recipe = recipe
@@ -79,8 +83,6 @@ class _Step[S]:
     def __repr__(self) -> str:
         return "\n  ".join(self._recipe) or type(self).__name__
 
-
-class _HasX[S: PredictorData](_Step[S]):
     def missing_x(self, proportion: float) -> Self:
         return type(self)(
             _compose(self._run, lambda data: missing_x(data, proportion)),
@@ -107,7 +109,7 @@ class _HasX[S: PredictorData](_Step[S]):
         return dict(td.squeeze(-1)), params
 
 
-class _HasY[S: ResponseData](_HasX[S]):
+class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
     def missing_y(self, proportion: float) -> Self:
         return type(self)(
             _compose(self._run, lambda data: missing_y(data, proportion)),
@@ -115,10 +117,10 @@ class _HasY[S: ResponseData](_HasX[S]):
         )
 
 
-class Response(_HasY[ResponseData]): ...
+class Response(_ResponsePipeline[ResponseData]): ...
 
 
-class PositiveSupportResponse(_HasY[ResponseData]):
+class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     def competing_risks(self) -> CompetingResponse:
         return CompetingResponse(
             _compose(self._run, competing_risks),
@@ -134,11 +136,28 @@ class PositiveSupportResponse(_HasY[ResponseData]):
         )
 
 
-def _identity[T](x: T) -> T:
-    return x
+class CompetingResponse(_ResponsePipeline[EventTimeData]):
+    def censor(
+        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
+    ) -> Survival:
+        return Survival(
+            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
+            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
+        )
 
 
-class _HasFamily(_HasX[PredictorData]):
+class Survival(_ResponsePipeline[SurvivalData]):
+    def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
+        return DiscreteSurvival(
+            _compose(self._run, lambda data: discretize(data, boundaries)),
+            (*self._recipe, _label(discretize, boundaries=boundaries)),
+        )
+
+
+class DiscreteSurvival(_ResponsePipeline[DiscreteSurvivalData]): ...
+
+
+class _FamilyPipeline(_Pipeline[PredictorData]):
     def __init__(
         self,
         run: Run[PredictorData],
@@ -158,8 +177,8 @@ class _HasFamily(_HasX[PredictorData]):
         self,
         family: Family,
         label: str,
-        cls: type[_HasY[ResponseData]] = Response,
-    ) -> _HasY[ResponseData]:
+        cls: type[_ResponsePipeline[ResponseData]] = Response,
+    ) -> _ResponsePipeline[ResponseData]:
         return cls(_compose(self._run, self._wrap(family)), (*self._recipe, label))
 
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
@@ -232,13 +251,14 @@ class _HasFamily(_HasX[PredictorData]):
         )
 
 
-class Simulation(_Step[InitialData]):
+class Simulation:
     def __init__(self, n: int, t: int, p: int, k: int) -> None:
         initial = InitialData(draws=(), n=n, t=t, p=p, k=k)
-        super().__init__(
-            lambda draws: (replace(initial, draws=draws), {}),
-            (f"Simulation(n={n}, t={t}, p={p}, k={k})",),
-        )
+        self._run: Run[InitialData] = lambda draws: (replace(initial, draws=draws), {})
+        self._recipe = (f"Simulation(n={n}, t={t}, p={p}, k={k})",)
+
+    def __repr__(self) -> str:
+        return "\n  ".join(self._recipe) or type(self).__name__
 
     def fixed_effects(
         self, X: Prior = UNIT_NORMAL, beta: Prior = UNIT_NORMAL
@@ -249,7 +269,7 @@ class Simulation(_Step[InitialData]):
         )
 
 
-class Predictor(_HasFamily):
+class Predictor(_FamilyPipeline):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
         super().__init__(run, recipe)
         self._re_count: int = 0
@@ -287,29 +307,8 @@ class Predictor(_HasFamily):
         return result
 
 
-class ConstantPredictor(_HasFamily):
+class ConstantPredictor(_FamilyPipeline):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
         super().__init__(
             run, recipe, wrap=lambda f: lambda data: constant_target(data, f)
         )
-
-
-class CompetingResponse(_HasY[EventTimeData]):
-    def censor(
-        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
-    ) -> Survival:
-        return Survival(
-            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
-            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
-        )
-
-
-class Survival(_HasY[SurvivalData]):
-    def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
-        return DiscreteSurvival(
-            _compose(self._run, lambda data: discretize(data, boundaries)),
-            (*self._recipe, _label(discretize, boundaries=boundaries)),
-        )
-
-
-class DiscreteSurvival(_HasY[DiscreteSurvivalData]): ...
