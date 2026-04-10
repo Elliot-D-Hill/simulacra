@@ -7,14 +7,6 @@ import torch.distributions as dist
 from tensordict import TensorDict
 from torch import Tensor
 
-from .states import (
-    DiscreteSurvivalData,
-    EventTimeData,
-    InitialData,
-    PredictorData,
-    ResponseData,
-    SurvivalData,
-)
 from .families import (
     Family,
     bernoulli,
@@ -30,8 +22,17 @@ from .families import (
     poisson,
     weibull,
 )
+from .states import (
+    DiscreteSurvivalData,
+    EventTimeData,
+    InitialData,
+    PredictorData,
+    ResponseData,
+    SurvivalData,
+)
 from .survival import censor, competing_risks, discretize
 from .transforms import (
+    Params,
     Prior,
     fixed_effects,
     missing_x,
@@ -45,7 +46,7 @@ UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
 EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
-type Run[S] = Callable[[tuple[int, ...]], tuple[S, dict[str, Tensor]]]
+type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
 
 
 def _label(fn: Callable[..., object], **kwargs: object) -> str:
@@ -60,10 +61,8 @@ def _label(fn: Callable[..., object], **kwargs: object) -> str:
     return f"{fn.__name__}({parts})"
 
 
-def _compose[S, T](
-    prev: Run[S], step: Callable[[S], tuple[T, dict[str, Tensor]]]
-) -> Run[T]:
-    def run(draws: tuple[int, ...]) -> tuple[T, dict[str, Tensor]]:
+def _compose[S, T](prev: Run[S], step: Callable[[S], tuple[T, Params]]) -> Run[T]:
+    def run(draws: tuple[int, ...]) -> tuple[T, Params]:
         data, params = prev(draws)
         new_data, new_params = step(data)
         return new_data, {**params, **new_params}
@@ -97,7 +96,7 @@ class _Pipeline[S: PredictorData]:
 
     def draw(
         self, draws: int | None = None, seed: int | None = None
-    ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
+    ) -> tuple[dict[str, Tensor], Params]:
         if seed is not None:
             torch.manual_seed(seed)  # type: ignore[no-untyped-call]
         batch = (draws,) if draws is not None else ()

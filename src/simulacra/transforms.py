@@ -43,11 +43,9 @@ def random_effects(
     membership = resolve(W, (*batch, n, 1, levels))
     basis = resolve(B, (*batch, n, t, q))
     coefficients = resolve(b, (*batch, levels, q, k))
-    eta_re = torch.einsum(
-        "...ntl,...ntr,...lrk->...ntk", membership, basis, coefficients
-    )
+    eta = torch.einsum("...ntl,...ntr,...lrk->...ntk", membership, basis, coefficients)
     params = {f"W_{index}": membership, f"B_{index}": basis, f"b_{index}": coefficients}
-    return replace(data, eta=data.eta + eta_re), params
+    return replace(data, eta=data.eta + eta), params
 
 
 def points(data: PredictorData, coordinates: Prior) -> tuple[PredictorData, Params]:
