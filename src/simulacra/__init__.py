@@ -3,6 +3,7 @@ from .builder import (
     UNIT_NORMAL,
     UNIT_VARIANCE,
     ConstantPredictor,
+    Covariate,
     DiscreteSurvival,
     CompetingResponse,
     Predictor,
@@ -13,18 +14,22 @@ from .builder import (
 )
 from .graph import Graph, Transition, build_graph, step
 from .states import (
+    CovariateData,
     DiscreteSurvivalData,
     EventTimeData,
     InitialData,
     PredictorData,
+    Prior,
     ResponseData,
     SurvivalData,
 )
 from .families import Family
-from .transforms import Prior, resolve
+from .transforms import resolve
 
 __all__ = [
     "ConstantPredictor",
+    "Covariate",
+    "CovariateData",
     "DiscreteSurvival",
     "DiscreteSurvivalData",
     "CompetingResponse",

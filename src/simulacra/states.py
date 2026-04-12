@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
 
+import torch.distributions as dist
 from torch import Tensor
+
+type Prior = dist.Distribution | Tensor
 
 
 @dataclass(frozen=True)
@@ -9,14 +12,19 @@ class InitialData:
     n: int
     t: int
     p: int
-    k: int
+    X: Prior
+    coordinates: Prior
 
 
 @dataclass(frozen=True)
-class PredictorData:
-    coordinates: Tensor  # [N, T, D]
-    X: Tensor  # [N, T, p]
-    eta: Tensor  # [N, T, K]
+class CovariateData:
+    X: Tensor  # [*draws, N, T, p]
+    coordinates: Tensor  # [*draws, N, T, D]
+
+
+@dataclass(frozen=True)
+class PredictorData(CovariateData):
+    eta: Tensor  # [*draws, N, T, K]
     tokens: Tensor | None = None  # [N, T]
 
 

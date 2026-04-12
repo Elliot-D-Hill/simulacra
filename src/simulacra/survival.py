@@ -3,8 +3,14 @@ import torch.distributions as dist
 import torch.nn.functional as F
 from torch import Tensor
 
-from .states import DiscreteSurvivalData, EventTimeData, ResponseData, SurvivalData
-from .transforms import Params, Prior, resolve
+from .states import (
+    DiscreteSurvivalData,
+    EventTimeData,
+    Prior,
+    ResponseData,
+    SurvivalData,
+)
+from .transforms import Params, resolve
 
 
 def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:

@@ -5,8 +5,8 @@ import torch
 import torch.distributions as dist
 from torch import Tensor
 
-from .states import PredictorData, ResponseData
-from .transforms import Params, Prior, resolve
+from .states import PredictorData, Prior, ResponseData
+from .transforms import Params, resolve
 
 type Family = Callable[[PredictorData], tuple[ResponseData, Params]]
 

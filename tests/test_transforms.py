@@ -12,7 +12,7 @@ def test_min_max_scale_range(dims: tuple[int, int, int, int]) -> None:
     """min_max_scale maps X into [0, 1] by default."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k).fixed_effects().min_max_scale().gaussian().draw(seed=0)
+        Simulation(N, T, p).min_max_scale().fixed_effects(k=k).gaussian().draw(seed=0)
     )
     assert data["X"].min() >= -1e-6
     assert data["X"].max() <= 1.0 + 1e-6
@@ -22,9 +22,9 @@ def test_min_max_scale_custom_range(dims: tuple[int, int, int, int]) -> None:
     """min_max_scale respects custom low/high bounds."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
         .min_max_scale(low=-1.0, high=1.0)
+        .fixed_effects(k=k)
         .gaussian()
         .draw(seed=0)
     )
@@ -35,9 +35,7 @@ def test_min_max_scale_custom_range(dims: tuple[int, int, int, int]) -> None:
 def test_z_score_moments(dims: tuple[int, int, int, int]) -> None:
     """z_score centers each covariate column to mean~0, std~1."""
     N, T, p, k = dims
-    data, _ = (
-        Simulation(N, T, p, k).fixed_effects().z_score().gaussian().draw(seed=0)
-    )
+    data, _ = Simulation(N, T, p).z_score().fixed_effects(k=k).gaussian().draw(seed=0)
     X = data["X"]
     column_mean = X.mean(dim=(-3, -2))
     column_std = X.std(dim=(-3, -2))
@@ -50,9 +48,9 @@ def test_min_max_scale_with_draws(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     D = 7
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
         .min_max_scale()
+        .fixed_effects(k=k)
         .gaussian()
         .draw(seed=0, draws=D)
     )
@@ -66,13 +64,90 @@ def test_z_score_with_draws(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     D = 7
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
         .z_score()
+        .fixed_effects(k=k)
         .gaussian()
         .draw(seed=0, draws=D)
     )
     assert data["X"].shape == (D, N, T, p)
+
+
+# --- covariate stage ---
+
+
+def test_covariates_then_scaling(dims: tuple[int, int, int, int]) -> None:
+    """Custom X via covariates flows through z_score into fixed_effects."""
+    N, T, p, k = dims
+    X_custom = torch.randn(N, T, p) * 10.0 + 50.0
+    data, _ = (
+        Simulation(N, T, p)
+        .covariates(X=X_custom)
+        .z_score()
+        .fixed_effects(k=k)
+        .gaussian()
+        .draw(seed=0)
+    )
+    column_mean = data["X"].mean(dim=(-3, -2))
+    assert torch.allclose(column_mean, torch.zeros(p), atol=1e-5)
+
+
+def test_chained_scalings(dims: tuple[int, int, int, int]) -> None:
+    """min_max_scale then z_score compose on the Covariate stage."""
+    N, T, p, k = dims
+    data, _ = (
+        Simulation(N, T, p)
+        .min_max_scale()
+        .z_score()
+        .fixed_effects(k=k)
+        .gaussian()
+        .draw(seed=0)
+    )
+    column_mean = data["X"].mean(dim=(-3, -2))
+    assert torch.allclose(column_mean, torch.zeros(p), atol=1e-5)
+
+
+def test_custom_coordinates(dims: tuple[int, int, int, int]) -> None:
+    """Custom coordinates via points survive through the pipeline."""
+    N, T, p, k = dims
+    custom_coords = torch.linspace(0.0, 10.0, T)
+    data, _ = (
+        Simulation(N, T, p)
+        .points(coordinates=custom_coords)
+        .fixed_effects(k=k)
+        .gaussian()
+        .draw(seed=0)
+    )
+    expected = custom_coords.unsqueeze(-1).expand(N, T, 1)
+    assert data["coordinates"].equal(expected)
+
+
+def test_covariates_and_points_order_independent(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """covariates and points can be called in either order."""
+    N, T, p, k = dims
+    X_custom = torch.randn(N, T, p)
+    custom_coords = torch.linspace(0.0, 10.0, T)
+    d1, _ = (
+        Simulation(N, T, p)
+        .covariates(X=X_custom)
+        .points(coordinates=custom_coords)
+        .fixed_effects(k=k)
+        .gaussian()
+        .draw(seed=0)
+    )
+    d2, _ = (
+        Simulation(N, T, p)
+        .points(coordinates=custom_coords)
+        .covariates(X=X_custom)
+        .fixed_effects(k=k)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert d1["X"].equal(d2["X"])
+    assert d1["coordinates"].equal(d2["coordinates"])
+    assert d1["y"].equal(d2["y"])
 
 
 # --- missing data ---
@@ -82,7 +157,7 @@ def test_missing_x(dims: tuple[int, int, int, int]) -> None:
     """missing_x injects NaNs into X."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k).fixed_effects().missing_x(0.3).gaussian().draw(seed=1)
+        Simulation(N, T, p).fixed_effects(k=k).gaussian().missing_x(0.3).draw(seed=1)
     )
     assert data["X"].isnan().any()
 
@@ -91,7 +166,7 @@ def test_missing_y(dims: tuple[int, int, int, int]) -> None:
     """missing_y injects NaNs into y."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k).fixed_effects().poisson().missing_y(0.3).draw(seed=1)
+        Simulation(N, T, p).fixed_effects(k=k).poisson().missing_y(0.3).draw(seed=1)
     )
     assert data["y"].shape == (N, T, k)
     assert data["y"].isnan().any()
@@ -103,12 +178,7 @@ def test_missing_y(dims: tuple[int, int, int, int]) -> None:
 def test_event_time(dims: tuple[int, int, int, int]) -> None:
     """Weibull response produces positive event times with correct shape."""
     N, T, p, k = dims
-    data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
-        .weibull(shape=1.0)
-        .draw(seed=1)
-    )
+    data, _ = Simulation(N, T, p).fixed_effects(k=k).weibull(shape=1.0).draw(seed=1)
     assert data["y"].shape == (N, T, k)
     assert (data["y"] > 0).all()
 
@@ -117,10 +187,7 @@ def test_log_logistic_event_time(dims: tuple[int, int, int, int]) -> None:
     """Log-logistic produces positive event times with correct shape."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
-        .log_logistic(shape=2.0)
-        .draw(seed=1)
+        Simulation(N, T, p).fixed_effects(k=k).log_logistic(shape=2.0).draw(seed=1)
     )
     assert data["y"].shape == (N, T, k)
     assert (data["y"] > 0).all()
@@ -129,23 +196,16 @@ def test_log_logistic_event_time(dims: tuple[int, int, int, int]) -> None:
 def test_gompertz_event_time(dims: tuple[int, int, int, int]) -> None:
     """Gompertz produces positive event times with correct shape."""
     N, T, p, k = dims
-    data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
-        .gompertz(shape=0.5)
-        .draw(seed=1)
-    )
+    data, _ = Simulation(N, T, p).fixed_effects(k=k).gompertz(shape=0.5).draw(seed=1)
     assert data["y"].shape == (N, T, k)
     assert (data["y"] > 0).all()
 
 
-def test_exponential_equals_weibull_shape_one(
-    dims: tuple[int, int, int, int],
-) -> None:
+def test_exponential_equals_weibull_shape_one(dims: tuple[int, int, int, int]) -> None:
     """Exponential is Weibull with shape=1."""
     N, T, p, k = dims
-    d1, _ = Simulation(N, T, p, k).fixed_effects().exponential().draw(seed=42)
-    d2, _ = Simulation(N, T, p, k).fixed_effects().weibull(shape=1.0).draw(seed=42)
+    d1, _ = Simulation(N, T, p).fixed_effects(k=k).exponential().draw(seed=42)
+    d2, _ = Simulation(N, T, p).fixed_effects(k=k).weibull(shape=1.0).draw(seed=42)
     assert d1["y"].equal(d2["y"])
 
 
@@ -153,8 +213,8 @@ def test_gamma_survival_pipeline(dims: tuple[int, int, int, int]) -> None:
     """Gamma response works through the full survival pipeline."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .gamma(concentration=2.0)
         .censor(horizon=2.0)
         .draw(seed=1)
@@ -168,8 +228,8 @@ def test_censor_time(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     horizon = 2.0
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .weibull()
         .censor(horizon=horizon)
         .draw(seed=1)
@@ -186,8 +246,8 @@ def test_default_membership_shapes(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     L, q = 3, 2
     data, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .random_effects(levels=L, q=q)
         .gaussian()
         .draw(seed=0)
@@ -202,8 +262,8 @@ def test_default_membership_dirichlet(dims: tuple[int, int, int, int]) -> None:
     """Default W is Dirichlet: rows sum to 1 with all-positive entries."""
     N, T, p, k = dims
     _, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .random_effects(levels=3, q=2)
         .gaussian()
         .draw(seed=0)
@@ -218,8 +278,8 @@ def test_default_membership_constant_across_time(
     """Default W has T=1, implying constant membership via broadcasting."""
     N, T, p, k = dims
     _, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .random_effects(levels=3, q=2)
         .gaussian()
         .draw(seed=0)
@@ -232,8 +292,8 @@ def test_random_effects_with_draws(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     D, L, q = 7, 3, 2
     data, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .random_effects(levels=L, q=q)
         .gaussian()
         .draw(seed=0, draws=D)
@@ -249,8 +309,8 @@ def test_explicit_dirichlet_membership(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     L = 3
     _, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .random_effects(levels=L, q=2, W=dist.Dirichlet(torch.ones(L)))
         .gaussian()
         .draw(seed=0)
@@ -266,8 +326,8 @@ def test_multiple_random_effects(dims: tuple[int, int, int, int]) -> None:
     L, q = 3, 2
     L2, q2 = 2, 3
     data, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .random_effects(levels=L, q=q)
         .random_effects(levels=L2, q=q2)
         .gaussian()
@@ -288,12 +348,16 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
     L, q = 3, 2
     torch.manual_seed(42)  # type: ignore[no-untyped-call]
     indices = torch.arange(N) % L
-    W_test = torch.nn.functional.one_hot(indices, L).unsqueeze(1).float().expand(N, T, L)
+    W_test = (
+        torch.nn.functional.one_hot(indices, L).unsqueeze(1).float().expand(N, T, L)
+    )
     B_test = torch.randn(N, T, q)
     b_test = torch.randn(L, q, k)
     eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W_test, B_test, b_test)
     coordinates = torch.arange(T, dtype=torch.float).unsqueeze(-1).expand(N, T, 1)
-    base_data = PredictorData(coordinates=coordinates, X=torch.empty(0), eta=torch.zeros(N, T, k))
+    base_data = PredictorData(
+        X=torch.empty(0), coordinates=coordinates, eta=torch.zeros(N, T, k)
+    )
     re_data, _ = random_effects(base_data, L, q, W_test, B_test, b_test)
     assert eta_manual.equal(re_data.eta)
 
@@ -305,7 +369,7 @@ def test_activation_relu_clips_negatives(dims: tuple[int, int, int, int]) -> Non
     """ReLU activation zeroes negative values in eta."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k).fixed_effects().activation().gaussian().draw(seed=0)
+        Simulation(N, T, p).fixed_effects(k=k).activation().gaussian().draw(seed=0)
     )
     assert (data["eta"] >= 0).all()
 
@@ -314,8 +378,8 @@ def test_activation_custom_function(dims: tuple[int, int, int, int]) -> None:
     """Custom activation applies the given function to eta."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .activation(torch.abs)
         .gaussian()
         .draw(seed=0)
@@ -331,8 +395,8 @@ def test_projection_shape(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     output = 8
     data, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .projection(output)
         .gaussian()
         .draw(seed=0)
@@ -347,8 +411,8 @@ def test_projection_with_draws(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     D, output = 7, 8
     data, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .projection(output)
         .gaussian()
         .draw(seed=0, draws=D)
@@ -362,8 +426,8 @@ def test_multiple_projections(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     mid, output = 8, 4
     _, params = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .projection(mid)
         .projection(output)
         .gaussian()
@@ -381,8 +445,8 @@ def test_mlp_pipeline(dims: tuple[int, int, int, int]) -> None:
     N, T, p, _ = dims
     hidden, output = 16, 3
     data, params = (
-        Simulation(N, T, p, k=hidden)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=hidden)
         .activation()
         .projection(output)
         .activation()
@@ -402,7 +466,7 @@ def test_constant_target_gaussian(dims: tuple[int, int, int, int]) -> None:
     """constant_target pools eta so y is identical at every timepoint."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k).fixed_effects().constant_target().gaussian().draw(seed=0)
+        Simulation(N, T, p).fixed_effects(k=k).constant_target().gaussian().draw(seed=0)
     )
     assert data["y"].shape == (N, T, k)
     assert data["X"].shape == (N, T, p)
@@ -415,7 +479,7 @@ def test_constant_target_poisson(dims: tuple[int, int, int, int]) -> None:
     """constant_target works with poisson family."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k).fixed_effects().constant_target().poisson().draw(seed=0)
+        Simulation(N, T, p).fixed_effects(k=k).constant_target().poisson().draw(seed=0)
     )
     for i in range(1, T):
         assert data["y"][:, 0, :].equal(data["y"][:, i, :])
@@ -425,8 +489,8 @@ def test_constant_target_bernoulli(dims: tuple[int, int, int, int]) -> None:
     """constant_target works with bernoulli family."""
     N, T, p, k = dims
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .constant_target()
         .bernoulli()
         .draw(seed=0)
@@ -440,8 +504,8 @@ def test_constant_target_with_draws(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     D = 7
     data, _ = (
-        Simulation(N, T, p, k)
-        .fixed_effects()
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
         .constant_target()
         .gaussian()
         .draw(seed=0, draws=D)
@@ -454,5 +518,5 @@ def test_constant_target_with_draws(dims: tuple[int, int, int, int]) -> None:
 def test_normal_y_varies_along_time(dims: tuple[int, int, int, int]) -> None:
     """Without constant_target, y varies along T."""
     N, T, p, k = dims
-    data, _ = Simulation(N, T, p, k).fixed_effects().gaussian().draw(seed=0)
+    data, _ = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
     assert not data["y"][:, 0, :].equal(data["y"][:, 1, :])
