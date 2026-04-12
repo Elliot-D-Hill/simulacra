@@ -92,11 +92,6 @@ def _identity[T](x: T) -> T:
     return x
 
 
-# ---------------------------------------------------------------------------
-# Pre-eta stages: Simulation -> Covariate -> Predictor
-# ---------------------------------------------------------------------------
-
-
 class Covariate:
     def __init__(self, run: Run[CovariateData], recipe: tuple[str, ...] = ()) -> None:
         self._run = run
@@ -191,11 +186,6 @@ class Simulation:
             ),
             (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
         )
-
-
-# ---------------------------------------------------------------------------
-# Post-eta stages: _Pipeline -> families -> response pipelines
-# ---------------------------------------------------------------------------
 
 
 class _Pipeline[S: PredictorData]:
