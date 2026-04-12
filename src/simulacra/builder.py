@@ -98,7 +98,7 @@ class Covariate:
         self._recipe = recipe
 
     def __repr__(self) -> str:
-        return "\n  ".join(self._recipe) or type(self).__name__
+        return "\n  .".join(self._recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
@@ -141,7 +141,7 @@ class Simulation:
         return obj
 
     def __repr__(self) -> str:
-        return "\n  ".join(self._recipe) or type(self).__name__
+        return "\n  .".join(self._recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
@@ -194,7 +194,7 @@ class _Pipeline[S: PredictorData]:
         self._recipe = recipe
 
     def __repr__(self) -> str:
-        return "\n  ".join(self._recipe) or type(self).__name__
+        return "\n  .".join(self._recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
