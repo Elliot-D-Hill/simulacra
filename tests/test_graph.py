@@ -13,9 +13,6 @@ from simulacra import (
 )
 
 
-# --- graph structure ---
-
-
 ALL_STATES = {
     CompetingResponse,
     ConstantPredictor,
@@ -103,7 +100,7 @@ def test_discrete_survival_transitions() -> None:
 
 
 def test_self_transitions_resolve_to_source() -> None:
-    """missing_x on Predictor targets Predictor (Self), not _Pipeline."""
+    """Self targets are stored as None, not the base class _Pipeline."""
     predictor_transitions = {
         (t.method, t.target) for t in GRAPH.from_state(Predictor)
     }
@@ -140,45 +137,25 @@ def test_private_methods_not_in_graph() -> None:
         assert not transition.method.startswith("_")
 
 
-# --- guided error messages ---
-
-
-def test_response_censor_guides_to_correct_classes(
-    dims: tuple[int, int, int, int],
-) -> None:
-    n, t, p, k = dims
-    resp = Simulation(n, t, p, k).fixed_effects().gaussian()
+def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
+    resp = Simulation(*dims).fixed_effects().gaussian()
     with pytest.raises(
-        AttributeError, match=r"Response has no method censor\(\)"
+        AttributeError,
+        match=r"Response has no method censor\(\).*CompetingResponse.*PositiveSupportResponse",
     ):
         resp.censor()  # type: ignore[attr-defined]
 
 
-def test_response_censor_lists_available_classes(
-    dims: tuple[int, int, int, int],
-) -> None:
-    n, t, p, k = dims
-    resp = Simulation(n, t, p, k).fixed_effects().gaussian()
-    with pytest.raises(AttributeError, match="CompetingResponse"):
-        resp.censor()  # type: ignore[attr-defined]
-    with pytest.raises(AttributeError, match="PositiveSupportResponse"):
-        resp.censor()  # type: ignore[attr-defined]
-
-
-def test_survival_gaussian_guides_to_family_classes(
-    dims: tuple[int, int, int, int],
-) -> None:
-    n, t, p, k = dims
-    surv = Simulation(n, t, p, k).fixed_effects().weibull().censor(horizon=2.0)
-    with pytest.raises(AttributeError, match="ConstantPredictor"):
-        surv.gaussian()  # type: ignore[attr-defined]
-    with pytest.raises(AttributeError, match="Predictor"):
+def test_survival_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
+    surv = Simulation(*dims).fixed_effects().weibull().censor(horizon=2.0)
+    with pytest.raises(
+        AttributeError, match=r"Survival has no method gaussian\(\).*Predictor"
+    ):
         surv.gaussian()  # type: ignore[attr-defined]
 
 
 def test_simulation_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
-    n, t, p, k = dims
-    sim = Simulation(n, t, p, k)
+    sim = Simulation(*dims)
     with pytest.raises(
         AttributeError, match=r"Simulation has no method gaussian\(\)"
     ):
@@ -186,17 +163,13 @@ def test_simulation_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_unknown_method_no_guidance(dims: tuple[int, int, int, int]) -> None:
-    """A truly unknown method gives a plain AttributeError."""
-    n, t, p, k = dims
-    resp = Simulation(n, t, p, k).fixed_effects().gaussian()
+    resp = Simulation(*dims).fixed_effects().gaussian()
     with pytest.raises(AttributeError, match="^foobar$"):
         resp.foobar()  # type: ignore[attr-defined]
 
 
 def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
-    """Existing hasattr pattern is not broken by __getattr__."""
-    n, t, p, k = dims
-    resp = Simulation(n, t, p, k).fixed_effects().gaussian()
+    resp = Simulation(*dims).fixed_effects().gaussian()
     assert not hasattr(resp, "censor")
     assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "discretize")
@@ -204,8 +177,6 @@ def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_valid_method_still_works(dims: tuple[int, int, int, int]) -> None:
-    """__getattr__ does not interfere with valid method calls."""
-    n, t, p, k = dims
-    resp = Simulation(n, t, p, k).fixed_effects().gaussian()
+    resp = Simulation(*dims).fixed_effects().gaussian()
     resp_with_missing = resp.missing_y(0.1)
     assert type(resp_with_missing).__name__ == "Response"

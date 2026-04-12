@@ -7,13 +7,15 @@ extracts the valid transition graph from type annotations at import time.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Self, get_type_hints
+
+_STEPS: set[Callable[..., Any]] = set()
 
 
 def step[F: Callable[..., Any]](fn: F) -> F:
     """Mark a method as a pipeline transition. Zero runtime cost."""
-    fn._is_step = True  # type: ignore[attr-defined]
+    _STEPS.add(fn)
     return fn
 
 
@@ -35,6 +37,19 @@ class Graph:
     """The pipeline's transition graph, queryable as data."""
 
     transitions: tuple[Transition, ...]
+    _methods: frozenset[str] = field(init=False, repr=False)
+    _owners: dict[str, frozenset[str]] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "_methods", frozenset(t.method for t in self.transitions)
+        )
+        owners: dict[str, set[str]] = {}
+        for t in self.transitions:
+            owners.setdefault(t.method, set()).add(t.source.__name__)
+        object.__setattr__(
+            self, "_owners", {m: frozenset(s) for m, s in owners.items()}
+        )
 
     def from_state(self, state: type) -> tuple[Transition, ...]:
         """Transitions leaving *state*."""
@@ -56,13 +71,11 @@ class Graph:
 
     def all_methods(self) -> frozenset[str]:
         """All method names across all states."""
-        return frozenset(t.method for t in self.transitions)
+        return self._methods
 
     def owners_of(self, method: str) -> frozenset[str]:
         """Class names that have *method* as a transition."""
-        return frozenset(
-            t.source.__name__ for t in self.transitions if t.method == method
-        )
+        return self._owners.get(method, frozenset())
 
 
 def build_graph(*state_classes: type) -> Graph:
@@ -82,7 +95,7 @@ def build_graph(*state_classes: type) -> Graph:
                 if name in seen:
                     continue
                 seen.add(name)
-                if not (callable(method) and getattr(method, "_is_step", False)):
+                if not (callable(method) and method in _STEPS):
                     continue
                 hints = get_type_hints(method)
                 target = hints.get("return")

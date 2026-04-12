@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Final, Self, overload
+from typing import Final, NoReturn, Self, overload
 
 import torch
 import torch.distributions as dist
@@ -83,7 +83,7 @@ class _Pipeline[S: PredictorData]:
     def __repr__(self) -> str:
         return "\n  ".join(self._recipe) or type(self).__name__
 
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
 
     @step
@@ -282,7 +282,7 @@ class Simulation:
     def __repr__(self) -> str:
         return "\n  ".join(self._recipe) or type(self).__name__
 
-    def __getattr__(self, name: str) -> object:
+    def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
 
     @step
