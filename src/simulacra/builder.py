@@ -125,9 +125,9 @@ class Covariate:
 
 class Simulation:
     def __init__(self, n: int, t: int, p: int) -> None:
-        default_coordinates = torch.arange(t, dtype=torch.float).unsqueeze(-1)
+        coordinates = torch.arange(t, dtype=torch.float).unsqueeze(-1)
         initial = InitialData(
-            draws=(), n=n, t=t, p=p, X=UNIT_NORMAL, coordinates=default_coordinates
+            draws=(), n=n, t=t, p=p, X=UNIT_NORMAL, coordinates=coordinates
         )
         self._run: Run[InitialData] = lambda draws: (replace(initial, draws=draws), {})
         self._recipe = (f"Simulation(n={n}, t={t}, p={p})",)
