@@ -36,11 +36,13 @@ from .transforms import (
     Params,
     Prior,
     fixed_effects,
+    min_max_scale,
     missing_x,
     missing_y,
     points,
     random_effects,
     tokenize,
+    z_score,
 )
 
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
@@ -85,6 +87,20 @@ class _Pipeline[S: PredictorData]:
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
+
+    @step
+    def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Self:
+        return type(self)(
+            _compose(self._run, lambda data: min_max_scale(data, low, high)),
+            (*self._recipe, _label(min_max_scale, low=low, high=high)),
+        )
+
+    @step
+    def z_score(self) -> Self:
+        return type(self)(
+            _compose(self._run, z_score),
+            (*self._recipe, _label(z_score)),
+        )
 
     @step
     def missing_x(self, proportion: float) -> Self:

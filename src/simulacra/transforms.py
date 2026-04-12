@@ -71,6 +71,24 @@ def missing_y[S: ResponseData](data: S, proportion: float) -> tuple[S, Params]:
     return replace(data, y=data.y.masked_fill(mask, float("nan"))), {}
 
 
+def min_max_scale[S: PredictorData](
+    data: S, low: float = 0.0, high: float = 1.0
+) -> tuple[S, Params]:
+    X = data.X
+    data_low = X.amin(dim=(-3, -2), keepdim=True)
+    data_high = X.amax(dim=(-3, -2), keepdim=True)
+    span = (data_high - data_low).clamp(min=1e-8)
+    scaled = low + (X - data_low) / span * (high - low)
+    return replace(data, X=scaled), {}
+
+
+def z_score[S: PredictorData](data: S) -> tuple[S, Params]:
+    X = data.X
+    mean = X.mean(dim=(-3, -2), keepdim=True)
+    std = X.std(dim=(-3, -2), keepdim=True).clamp(min=1e-8)
+    return replace(data, X=(X - mean) / std), {}
+
+
 def tokenize[S: PredictorData](data: S, vocab_size: int) -> tuple[S, Params]:
     weights = torch.randn(data.eta.shape[-1], vocab_size)
     probs = torch.softmax(data.eta @ weights, dim=-1)
