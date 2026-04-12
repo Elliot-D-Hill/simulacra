@@ -5,7 +5,13 @@ import torch
 import torch.distributions as dist
 from torch import Tensor
 
-from .states import CovariateData, InitialData, PredictorData, Prior, ResponseData
+from .states import (
+    CovariateData,
+    InitialData,
+    PredictorData,
+    Prior,
+    ResponseData,
+)
 
 type Params = dict[str, Tensor]
 
