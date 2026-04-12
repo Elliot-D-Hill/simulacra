@@ -51,9 +51,17 @@ class DiscreteSurvivalData(SurvivalData):
     discrete_event_time: Tensor = field(default_factory=Tensor)  # [N, T, K, J]
 
 
-class SimulationData(dict[str, Tensor]):
+class _TensorDict(dict[str, Tensor]):
     def __repr__(self) -> str:
         fields = "\n".join(
             f"    {k}: {list(v.shape)}" for k, v in self.items()
         )
-        return f"SimulationData(\n{fields}\n)"
+        return f"{type(self).__name__}(\n{fields}\n)"
+
+
+class SimulationData(_TensorDict):
+    pass
+
+
+class SimulationParams(_TensorDict):
+    pass

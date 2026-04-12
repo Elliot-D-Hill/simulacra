@@ -31,6 +31,7 @@ from .states import (
     Prior,
     ResponseData,
     SimulationData,
+    SimulationParams,
     SurvivalData,
 )
 from .survival import EXP1, censor, competing_risks, discretize
@@ -200,14 +201,14 @@ class _Pipeline[S: PredictorData]:
 
     def draw(
         self, draws: int | None = None, seed: int | None = None
-    ) -> tuple[SimulationData, Params]:
+    ) -> tuple[SimulationData, SimulationParams]:
         if seed is not None:
             torch.manual_seed(seed)  # type: ignore[no-untyped-call]
         batch = (draws,) if draws is not None else ()
         data, params = self._run(batch)
         tensor_data = {k: v for k, v in vars(data).items() if v is not None}
         squeezed = {k: v.squeeze(-2) for k, v in tensor_data.items()}
-        return SimulationData(squeezed), params
+        return SimulationData(squeezed), SimulationParams(params)
 
 
 class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
