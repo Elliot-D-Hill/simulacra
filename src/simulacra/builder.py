@@ -207,10 +207,9 @@ class _Pipeline[S: PredictorData]:
         batch = (draws,) if draws is not None else ()
         data, params = self._run(batch)
         tensor_data = {k: v for k, v in vars(data).items() if v is not None}
-        n, t = data.X.shape[-3], data.X.shape[-2]
-        td = TensorDict(tensor_data, batch_size=(*batch, n, t))
-        # TODO: casting to dict is a patch due to TensorDict poor access typing
-        return dict(td.squeeze(-1)), params
+        n, t = data.X.shape[-3:-1]
+        td = TensorDict(tensor_data, batch_size=(*batch, n, t)).squeeze(-1)
+        return td, params
 
 
 class _ResponsePipeline[S: ResponseData](_Pipeline[S]):

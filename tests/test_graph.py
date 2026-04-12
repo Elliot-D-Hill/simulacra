@@ -13,8 +13,7 @@ from simulacra import (
     Survival,
 )
 
-
-ALL_STATES = {
+ALL_STATES: set[type] = {
     CompetingResponse,
     ConstantPredictor,
     Covariate,

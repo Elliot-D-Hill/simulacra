@@ -2,7 +2,6 @@ import torch
 
 from simulacra import Simulation
 
-
 # --- type-state enforcement ---
 
 
@@ -97,7 +96,7 @@ def test_constant_predictor_methods(dims: tuple[int, int, int, int]) -> None:
 
 def test_covariate_methods(dims: tuple[int, int, int, int]) -> None:
     """Covariate has scaling and fixed_effects, but no families or draw."""
-    N, T, p, k = dims
+    N, T, p, _ = dims
     cov = Simulation(N, T, p).z_score()
     assert hasattr(cov, "z_score")
     assert hasattr(cov, "min_max_scale")
