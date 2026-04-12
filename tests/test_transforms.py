@@ -294,8 +294,105 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
     eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W_test, B_test, b_test)
     coordinates = torch.arange(T, dtype=torch.float).unsqueeze(-1).expand(N, T, 1)
     base_data = PredictorData(coordinates=coordinates, X=torch.empty(0), eta=torch.zeros(N, T, k))
-    re_data, _ = random_effects(base_data, L, q, W_test, B_test, b_test, 0)
+    re_data, _ = random_effects(base_data, L, q, W_test, B_test, b_test)
     assert eta_manual.equal(re_data.eta)
+
+
+# --- activation ---
+
+
+def test_activation_relu_clips_negatives(dims: tuple[int, int, int, int]) -> None:
+    """ReLU activation zeroes negative values in eta."""
+    N, T, p, k = dims
+    data, _ = (
+        Simulation(N, T, p, k).fixed_effects().activation().gaussian().draw(seed=0)
+    )
+    assert (data["eta"] >= 0).all()
+
+
+def test_activation_custom_function(dims: tuple[int, int, int, int]) -> None:
+    """Custom activation applies the given function to eta."""
+    N, T, p, k = dims
+    data, _ = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .activation(torch.abs)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert (data["eta"] >= 0).all()
+
+
+# --- projection ---
+
+
+def test_projection_shape(dims: tuple[int, int, int, int]) -> None:
+    """Projection changes eta's last dimension and returns indexed weight."""
+    N, T, p, k = dims
+    output = 8
+    data, params = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .projection(output)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data["eta"].shape == (N, T, output)
+    assert "weight_0" in params
+    assert params["weight_0"].shape == (k, output)
+
+
+def test_projection_with_draws(dims: tuple[int, int, int, int]) -> None:
+    """Draws dimension propagates through projection."""
+    N, T, p, k = dims
+    D, output = 7, 8
+    data, params = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .projection(output)
+        .gaussian()
+        .draw(seed=0, draws=D)
+    )
+    assert data["eta"].shape == (D, N, T, output)
+    assert params["weight_0"].shape == (D, k, output)
+
+
+def test_multiple_projections(dims: tuple[int, int, int, int]) -> None:
+    """Two projections produce independently indexed weight params."""
+    N, T, p, k = dims
+    mid, output = 8, 4
+    _, params = (
+        Simulation(N, T, p, k)
+        .fixed_effects()
+        .projection(mid)
+        .projection(output)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert params["weight_0"].shape == (k, mid)
+    assert params["weight_1"].shape == (mid, output)
+
+
+# --- MLP pipeline ---
+
+
+def test_mlp_pipeline(dims: tuple[int, int, int, int]) -> None:
+    """Activation and projection compose into an MLP-like pipeline."""
+    N, T, p, _ = dims
+    hidden, output = 16, 3
+    data, params = (
+        Simulation(N, T, p, k=hidden)
+        .fixed_effects()
+        .activation()
+        .projection(output)
+        .activation()
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data["eta"].shape == (N, T, output)
+    assert data["y"].shape == (N, T, output)
+    assert (data["eta"] >= 0).all()
+    assert "weight_0" in params
 
 
 # --- constant target ---

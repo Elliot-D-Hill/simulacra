@@ -35,11 +35,13 @@ from .survival import censor, competing_risks, discretize
 from .transforms import (
     Params,
     Prior,
+    activation,
     fixed_effects,
     min_max_scale,
     missing_x,
     missing_y,
     points,
+    projection,
     random_effects,
     tokenize,
     z_score,
@@ -71,6 +73,15 @@ def _compose[S, T](prev: Run[S], step: Callable[[S], tuple[T, Params]]) -> Run[T
         return new_data, {**params, **new_params}
 
     return run
+
+
+def _suffixed[S, T](
+    fn: Callable[[S], tuple[T, Params]], index: int
+) -> Callable[[S], tuple[T, Params]]:
+    def wrapped(data: S) -> tuple[T, Params]:
+        new_data, params = fn(data)
+        return new_data, {f"{k}_{index}": v for k, v in params.items()}
+    return wrapped
 
 
 def _identity[T](x: T) -> T:
@@ -315,6 +326,13 @@ class Predictor(_FamilyPipeline):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
         super().__init__(run, recipe)
         self._re_count: int = 0
+        self._proj_count: int = 0
+
+    def _chain(self, run: Run[PredictorData], recipe: tuple[str, ...]) -> Predictor:
+        result = Predictor(run, recipe)
+        result._re_count = self._re_count
+        result._proj_count = self._proj_count
+        return result
 
     @step
     def random_effects(
@@ -329,13 +347,36 @@ class Predictor(_FamilyPipeline):
         index = self._re_count
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
-        result = Predictor(
+        result = self._chain(
             _compose(
-                self._run, lambda data: random_effects(data, levels, q, w, B, b, index)
+                self._run,
+                _suffixed(lambda data: random_effects(data, levels, q, w, B, b), index),
             ),
             (*self._recipe, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)),
         )
         result._re_count = index + 1
+        return result
+
+    @step
+    def activation(
+        self, fn: Callable[[Tensor], Tensor] = torch.relu
+    ) -> Predictor:
+        return self._chain(
+            _compose(self._run, lambda data: activation(data, fn)),
+            (*self._recipe, _label(activation)),
+        )
+
+    @step
+    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
+        index = self._proj_count
+        result = self._chain(
+            _compose(
+                self._run,
+                _suffixed(lambda data: projection(data, output, weight), index),
+            ),
+            (*self._recipe, _label(projection, output=output, weight=weight)),
+        )
+        result._proj_count = index + 1
         return result
 
     @step
@@ -344,12 +385,10 @@ class Predictor(_FamilyPipeline):
 
     @step
     def points(self, coordinates: Prior = EXP1) -> Predictor:
-        result = Predictor(
+        return self._chain(
             _compose(self._run, lambda data: points(data, coordinates)),
             (*self._recipe, _label(points, coordinates=coordinates)),
         )
-        result._re_count = self._re_count
-        return result
 
 
 class ConstantPredictor(_FamilyPipeline):

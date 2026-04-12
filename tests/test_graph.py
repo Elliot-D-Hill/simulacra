@@ -36,6 +36,8 @@ def test_simulation_transitions() -> None:
 def test_predictor_transitions() -> None:
     expected = {
         "random_effects",
+        "activation",
+        "projection",
         "constant_target",
         "points",
         "gaussian",
@@ -50,6 +52,8 @@ def test_predictor_transitions() -> None:
         "exponential",
         "log_logistic",
         "gompertz",
+        "min_max_scale",
+        "z_score",
         "missing_x",
         "tokenize",
     }
@@ -70,6 +74,8 @@ def test_constant_predictor_transitions() -> None:
         "exponential",
         "log_logistic",
         "gompertz",
+        "min_max_scale",
+        "z_score",
         "missing_x",
         "tokenize",
     }
@@ -77,26 +83,36 @@ def test_constant_predictor_transitions() -> None:
 
 
 def test_response_transitions() -> None:
-    assert GRAPH.methods_on(Response) == {"missing_x", "missing_y", "tokenize"}
+    expected = {"min_max_scale", "z_score", "missing_x", "missing_y", "tokenize"}
+    assert GRAPH.methods_on(Response) == expected
 
 
 def test_positive_support_response_transitions() -> None:
-    expected = {"competing_risks", "censor", "missing_x", "missing_y", "tokenize"}
+    expected = {
+        "competing_risks",
+        "censor",
+        "min_max_scale",
+        "z_score",
+        "missing_x",
+        "missing_y",
+        "tokenize",
+    }
     assert GRAPH.methods_on(PositiveSupportResponse) == expected
 
 
 def test_competing_response_transitions() -> None:
-    expected = {"censor", "missing_x", "missing_y", "tokenize"}
+    expected = {"censor", "min_max_scale", "z_score", "missing_x", "missing_y", "tokenize"}
     assert GRAPH.methods_on(CompetingResponse) == expected
 
 
 def test_survival_transitions() -> None:
-    expected = {"discretize", "missing_x", "missing_y", "tokenize"}
+    expected = {"discretize", "min_max_scale", "z_score", "missing_x", "missing_y", "tokenize"}
     assert GRAPH.methods_on(Survival) == expected
 
 
 def test_discrete_survival_transitions() -> None:
-    assert GRAPH.methods_on(DiscreteSurvival) == {"missing_x", "missing_y", "tokenize"}
+    expected = {"min_max_scale", "z_score", "missing_x", "missing_y", "tokenize"}
+    assert GRAPH.methods_on(DiscreteSurvival) == expected
 
 
 def test_self_transitions_resolve_to_source() -> None:

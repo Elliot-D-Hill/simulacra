@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import replace
 
 import torch
@@ -35,7 +36,7 @@ def fixed_effects(
 
 
 def random_effects(
-    data: PredictorData, levels: int, q: int, W: Prior, B: Prior, b: Prior, index: int
+    data: PredictorData, levels: int, q: int, W: Prior, B: Prior, b: Prior
 ) -> tuple[PredictorData, Params]:
     *batch, n, t, k = data.eta.shape
     # design choice: T=1 implies membership is constant over time. For
@@ -44,8 +45,7 @@ def random_effects(
     basis = resolve(B, (*batch, n, t, q))
     coefficients = resolve(b, (*batch, levels, q, k))
     eta = torch.einsum("...ntl,...ntr,...lrk->...ntk", membership, basis, coefficients)
-    params = {f"W_{index}": membership, f"B_{index}": basis, f"b_{index}": coefficients}
-    return replace(data, eta=data.eta + eta), params
+    return replace(data, eta=data.eta + eta), {"W": membership, "B": basis, "b": coefficients}
 
 
 def points(data: PredictorData, coordinates: Prior) -> tuple[PredictorData, Params]:
@@ -87,6 +87,20 @@ def z_score[S: PredictorData](data: S) -> tuple[S, Params]:
     mean = X.mean(dim=(-3, -2), keepdim=True)
     std = X.std(dim=(-3, -2), keepdim=True).clamp(min=1e-8)
     return replace(data, X=(X - mean) / std), {}
+
+
+def activation(
+    data: PredictorData, fn: Callable[[Tensor], Tensor]
+) -> tuple[PredictorData, Params]:
+    return replace(data, eta=fn(data.eta)), {}
+
+
+def projection(
+    data: PredictorData, output: int, weight: Prior
+) -> tuple[PredictorData, Params]:
+    *batch, _, _, k_in = data.eta.shape
+    w = resolve(weight, (*batch, k_in, output))
+    return replace(data, eta=data.eta @ w.unsqueeze(-3)), {"weight": w}
 
 
 def tokenize[S: PredictorData](data: S, vocab_size: int) -> tuple[S, Params]:
