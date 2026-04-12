@@ -4,7 +4,6 @@ from typing import Final, NoReturn, Self, overload
 
 import torch
 import torch.distributions as dist
-from tensordict import TensorDict
 from torch import Tensor
 
 from .families import (
@@ -31,6 +30,7 @@ from .states import (
     PredictorData,
     Prior,
     ResponseData,
+    SimulationData,
     SurvivalData,
 )
 from .survival import EXP1, censor, competing_risks, discretize
@@ -200,15 +200,14 @@ class _Pipeline[S: PredictorData]:
 
     def draw(
         self, draws: int | None = None, seed: int | None = None
-    ) -> tuple[dict[str, Tensor], Params]:
+    ) -> tuple[SimulationData, Params]:
         if seed is not None:
             torch.manual_seed(seed)  # type: ignore[no-untyped-call]
         batch = (draws,) if draws is not None else ()
         data, params = self._run(batch)
         tensor_data = {k: v for k, v in vars(data).items() if v is not None}
-        n, t = data.X.shape[-3:-1]
-        td = TensorDict(tensor_data, batch_size=(*batch, n, t)).squeeze(-1)
-        return td, params
+        squeezed = {k: v.squeeze(-2) for k, v in tensor_data.items()}
+        return SimulationData(squeezed), params
 
 
 class _ResponsePipeline[S: ResponseData](_Pipeline[S]):

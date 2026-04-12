@@ -21,6 +21,7 @@ from .states import (
     PredictorData,
     Prior,
     ResponseData,
+    SimulationData,
     SurvivalData,
 )
 from .families import Family
@@ -44,6 +45,7 @@ __all__ = [
     "Response",
     "ResponseData",
     "Simulation",
+    "SimulationData",
     "Survival",
     "SurvivalData",
     "Transition",
