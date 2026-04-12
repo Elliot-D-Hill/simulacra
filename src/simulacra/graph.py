@@ -118,6 +118,5 @@ def guide(instance: object, name: str, graph: Graph) -> AttributeError:
         return AttributeError(name)
     owners = sorted(graph.owners_of(name) - {current})
     return AttributeError(
-        f"{current} has no method {name}(); "
-        f"available from: {', '.join(owners)}"
+        f"{current} has no method {name}(); available from: {', '.join(owners)}"
     )

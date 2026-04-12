@@ -7,7 +7,6 @@ import torch.distributions as dist
 from tensordict import TensorDict
 from torch import Tensor
 
-from .graph import Graph, build_graph, guide, step
 from .families import (
     Family,
     bernoulli,
@@ -23,6 +22,7 @@ from .families import (
     poisson,
     weibull,
 )
+from .graph import Graph, build_graph, guide, step
 from .states import (
     DiscreteSurvivalData,
     EventTimeData,
@@ -81,6 +81,7 @@ def _suffixed[S, T](
     def wrapped(data: S) -> tuple[T, Params]:
         new_data, params = fn(data)
         return new_data, {f"{k}_{index}": v for k, v in params.items()}
+
     return wrapped
 
 
@@ -109,8 +110,7 @@ class _Pipeline[S: PredictorData]:
     @step
     def z_score(self) -> Self:
         return type(self)(
-            _compose(self._run, z_score),
-            (*self._recipe, _label(z_score)),
+            _compose(self._run, z_score), (*self._recipe, _label(z_score))
         )
 
     @step
@@ -358,9 +358,7 @@ class Predictor(_FamilyPipeline):
         return result
 
     @step
-    def activation(
-        self, fn: Callable[[Tensor], Tensor] = torch.relu
-    ) -> Predictor:
+    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
         return self._chain(
             _compose(self._run, lambda data: activation(data, fn)),
             (*self._recipe, _label(activation)),
