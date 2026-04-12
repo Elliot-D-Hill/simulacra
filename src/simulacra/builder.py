@@ -33,7 +33,7 @@ from .states import (
     ResponseData,
     SurvivalData,
 )
-from .survival import censor, competing_risks, discretize
+from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
     Params,
     activation,
@@ -52,7 +52,6 @@ from .transforms import (
 
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
-EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
 
@@ -241,7 +240,7 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
 
     @step
     def censor(
-        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
+        self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> "Survival":
         return Survival(
             _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
@@ -252,7 +251,7 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
 class CompetingResponse(_ResponsePipeline[EventTimeData]):
     @step
     def censor(
-        self, dropout: Prior | None = None, *, horizon: float | Tensor = torch.inf
+        self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> "Survival":
         return Survival(
             _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),

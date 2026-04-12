@@ -1,3 +1,5 @@
+from typing import Final
+
 import torch
 import torch.distributions as dist
 import torch.nn.functional as F
@@ -12,6 +14,8 @@ from .states import (
 )
 from .transforms import Params, resolve
 
+EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
+
 
 def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:
     latent = data.y  # [N, T, K]
@@ -25,16 +29,10 @@ def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:
 
 
 def censor(
-    data: ResponseData,
-    dropout: Prior | None = None,
-    *,
-    horizon: float | Tensor = torch.inf,
+    data: ResponseData, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
 ) -> tuple[SurvivalData, Params]:
     event_time = getattr(data, "event_time", data.y)
     prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
-    if dropout is None:
-        t_max = data.coordinates[..., -1:, :1].clamp(min=1.0)  # [*batch, N, 1, 1]
-        dropout = dist.Uniform(torch.zeros(()), t_max)
     absolute = resolve(dropout, (*event_time.shape[:-2], 1, 1))
     rolling = data.coordinates[..., :1] + horizon  # [*batch, N, T, 1]
     censor_time = torch.minimum(torch.minimum(prior_censor, absolute), rolling)
