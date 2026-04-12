@@ -117,7 +117,7 @@ class Covariate:
         )
 
     @step
-    def fixed_effects(self, k: int, beta: Prior = UNIT_NORMAL) -> "Predictor":
+    def fixed_effects(self, k: int, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
             _compose(self._run, lambda data: fixed_effects(data, k, beta)),
             (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
@@ -178,7 +178,7 @@ class Simulation:
         )
 
     @step
-    def fixed_effects(self, k: int, beta: Prior = UNIT_NORMAL) -> "Predictor":
+    def fixed_effects(self, k: int, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
             _compose(
                 _compose(self._run, resolve_design),
@@ -261,7 +261,7 @@ class CompetingResponse(_ResponsePipeline[EventTimeData]):
 
 class Survival(_ResponsePipeline[SurvivalData]):
     @step
-    def discretize(self, boundaries: Tensor) -> "DiscreteSurvival":
+    def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
         return DiscreteSurvival(
             _compose(self._run, lambda data: discretize(data, boundaries)),
             (*self._recipe, _label(discretize, boundaries=boundaries)),
@@ -383,7 +383,7 @@ class Predictor(_FamilyPipeline):
         self._re_count: int = 0
         self._proj_count: int = 0
 
-    def _chain(self, run: Run[PredictorData], recipe: tuple[str, ...]) -> "Predictor":
+    def _chain(self, run: Run[PredictorData], recipe: tuple[str, ...]) -> Predictor:
         result = Predictor(run, recipe)
         result._re_count = self._re_count
         result._proj_count = self._proj_count
@@ -398,7 +398,7 @@ class Predictor(_FamilyPipeline):
         W: Prior | None = None,
         B: Prior = UNIT_NORMAL,
         b: Prior = UNIT_NORMAL,
-    ) -> "Predictor":
+    ) -> Predictor:
         index = self._re_count
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
@@ -413,14 +413,14 @@ class Predictor(_FamilyPipeline):
         return result
 
     @step
-    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> "Predictor":
+    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
         return self._chain(
             _compose(self._run, lambda data: activation(data, fn)),
             (*self._recipe, _label(activation)),
         )
 
     @step
-    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> "Predictor":
+    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
         index = self._proj_count
         result = self._chain(
             _compose(
@@ -433,7 +433,7 @@ class Predictor(_FamilyPipeline):
         return result
 
     @step
-    def tokenize(self, vocab_size: int) -> "Predictor":
+    def tokenize(self, vocab_size: int) -> Predictor:
         return self._chain(
             _compose(self._run, lambda data: tokenize(data, vocab_size)),
             (*self._recipe, _label(tokenize, vocab_size=vocab_size)),
