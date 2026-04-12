@@ -117,7 +117,7 @@ class Covariate:
         )
 
     @step
-    def fixed_effects(self, k: int, beta: Prior = UNIT_NORMAL) -> Predictor:
+    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
             _compose(self._run, lambda data: fixed_effects(data, k, beta)),
             (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
@@ -125,7 +125,7 @@ class Covariate:
 
 
 class Simulation:
-    def __init__(self, n: int, t: int, p: int) -> None:
+    def __init__(self, n: int, t: int = 1, p: int = 1) -> None:
         coordinates = torch.arange(t, dtype=torch.float).unsqueeze(-1)
         initial = InitialData(
             draws=(), n=n, t=t, p=p, X=UNIT_NORMAL, coordinates=coordinates
@@ -178,7 +178,7 @@ class Simulation:
         )
 
     @step
-    def fixed_effects(self, k: int, beta: Prior = UNIT_NORMAL) -> Predictor:
+    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
             _compose(
                 _compose(self._run, resolve_design),
