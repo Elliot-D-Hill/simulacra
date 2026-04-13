@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from typing import Final, NoReturn, Self, overload
+from typing import Any, Final, NoReturn, Self
 
 import torch
 import torch.distributions as dist
@@ -50,8 +50,8 @@ UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
 
 
-class Simulation:
-    def __init__(self, pipeline: Pipeline[CovariateData]) -> None:
+class _Pipeline[S]:
+    def __init__(self, pipeline: Pipeline[S]) -> None:
         self._pipeline = pipeline
 
     def __repr__(self) -> str:
@@ -60,17 +60,30 @@ class Simulation:
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
 
+    def _step[B: _Pipeline[Any]](
+        self, cls: type[B], transform: Callable[..., Any], **kwargs: object
+    ) -> B:
+        return cls(self._pipeline.apply(transform, **kwargs))
+
+    def draw(self, draws: int | None = None, seed: int | None = None) -> S:
+        if seed is not None:
+            torch.manual_seed(seed)  # type: ignore[no-untyped-call]
+        batch = (draws,) if draws is not None else ()
+        return self._pipeline.run(batch)
+
+
+class Simulation(_Pipeline[CovariateData]):
     @step
     def z_score(self) -> Simulation:
-        return Simulation(self._pipeline.apply(z_score))
+        return self._step(Simulation, z_score)
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Simulation:
-        return Simulation(self._pipeline.apply(min_max_scale, low=low, high=high))
+        return self._step(Simulation, min_max_scale, low=low, high=high)
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
-        return Predictor(self._pipeline.apply(fixed_effects, k=k, beta=beta))
+        return self._step(Predictor, fixed_effects, k=k, beta=beta)
 
 
 def simulate(
@@ -97,35 +110,18 @@ def simulate(
     )
 
 
-class _Pipeline[S: PredictorData]:
-    def __init__(self, pipeline: Pipeline[S]) -> None:
-        self._pipeline = pipeline
-
-    def __repr__(self) -> str:
-        return "\n  .".join(self._pipeline.recipe) or type(self).__name__
-
-    def __getattr__(self, name: str) -> NoReturn:
-        raise guide(self, name, GRAPH)
-
-    def draw(self, draws: int | None = None, seed: int | None = None) -> S:
-        if seed is not None:
-            torch.manual_seed(seed)  # type: ignore[no-untyped-call]
-        batch = (draws,) if draws is not None else ()
-        return self._pipeline.run(batch)
-
-
 class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
     @step
     def missing_x(self, proportion: float) -> Self:
-        return type(self)(self._pipeline.apply(missing_x, proportion=proportion))
+        return self._step(type(self), missing_x, proportion=proportion)
 
     @step
     def missing_y(self, proportion: float) -> Self:
-        return type(self)(self._pipeline.apply(missing_y, proportion=proportion))
+        return self._step(type(self), missing_y, proportion=proportion)
 
     @step
     def constant_y(self) -> Self:
-        return type(self)(self._pipeline.apply(constant_y))
+        return self._step(type(self), constant_y)
 
 
 class Response(_ResponsePipeline[ResponseData]): ...
@@ -136,13 +132,13 @@ class _CensorPipeline[S: ResponseData](_ResponsePipeline[S]):
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> Survival:
-        return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
+        return self._step(Survival, censor, dropout=dropout, horizon=horizon)
 
 
 class PositiveSupportResponse(_CensorPipeline[ResponseData]):
     @step
     def competing_risks(self) -> CompetingResponse:
-        return CompetingResponse(self._pipeline.apply(competing_risks))
+        return self._step(CompetingResponse, competing_risks)
 
 
 class CompetingResponse(_CensorPipeline[EventTimeData]): ...
@@ -151,82 +147,60 @@ class CompetingResponse(_CensorPipeline[EventTimeData]): ...
 class Survival(_ResponsePipeline[SurvivalData]):
     @step
     def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
-        return DiscreteSurvival(self._pipeline.apply(discretize, boundaries=boundaries))
+        return self._step(DiscreteSurvival, discretize, boundaries=boundaries)
 
 
 class DiscreteSurvival(_ResponsePipeline[DiscreteSurvivalData]): ...
 
 
 class _FamilyPipeline(_Pipeline[PredictorData]):
-    @overload
-    def _family(
-        self,
-        fn: Callable[..., ResponseData],
-        cls: type[Response] = ...,
-        **kwargs: object,
-    ) -> Response: ...
-    @overload
-    def _family(
-        self,
-        fn: Callable[..., ResponseData],
-        cls: type[PositiveSupportResponse],
-        **kwargs: object,
-    ) -> PositiveSupportResponse: ...
-    def _family(
-        self,
-        fn: Callable[..., ResponseData],
-        cls: type[_ResponsePipeline[ResponseData]] = Response,
-        **kwargs: object,
-    ) -> _ResponsePipeline[ResponseData]:
-        return cls(self._pipeline.apply(fn, **kwargs))
-
     @step
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
-        return self._family(gaussian, covariance=covariance)
+        return self._step(Response, gaussian, covariance=covariance)
 
     @step
     def poisson(self) -> Response:
-        return self._family(poisson)
+        return self._step(Response, poisson)
 
     @step
     def bernoulli(self) -> Response:
-        return self._family(bernoulli)
+        return self._step(Response, bernoulli)
 
     @step
     def binomial(self, num_trials: int = 1) -> Response:
-        return self._family(binomial, num_trials=num_trials)
+        return self._step(Response, binomial, num_trials=num_trials)
 
     @step
     def negative_binomial(self, concentration: float | Tensor) -> Response:
-        return self._family(negative_binomial, concentration=concentration)
+        return self._step(Response, negative_binomial, concentration=concentration)
 
     @step
     def categorical(self) -> Response:
-        return self._family(categorical)
+        return self._step(Response, categorical)
 
     @step
     def gamma(self, concentration: float | Tensor) -> PositiveSupportResponse:
-        return self._family(gamma, PositiveSupportResponse, concentration=concentration)
+        return self._step(PositiveSupportResponse, gamma, concentration=concentration)
 
     @step
     def log_normal(self, std: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._family(log_normal, PositiveSupportResponse, std=std)
+        return self._step(PositiveSupportResponse, log_normal, std=std)
 
     @step
     def weibull(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._family(weibull, PositiveSupportResponse, shape=shape)
+        return self._step(PositiveSupportResponse, weibull, shape=shape)
 
     @step
     def exponential(self) -> PositiveSupportResponse:
-        return self._family(exponential, PositiveSupportResponse)
+        return self._step(PositiveSupportResponse, exponential)
 
     @step
     def log_logistic(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._family(log_logistic, PositiveSupportResponse, shape=shape)
+        return self._step(PositiveSupportResponse, log_logistic, shape=shape)
 
     @step
     def gompertz(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._family(gompertz, PositiveSupportResponse, shape=shape)
+        return self._step(PositiveSupportResponse, gompertz, shape=shape)
 
 
 class Predictor(_FamilyPipeline):
@@ -241,24 +215,23 @@ class Predictor(_FamilyPipeline):
         b: Prior = UNIT_NORMAL,
     ) -> Predictor:
         # design choice: default to soft level assignments
-        return Predictor(
-            self._pipeline.apply(
-                random_effects,
-                levels=levels,
-                q=q,
-                W=W or dist.Dirichlet(torch.ones(levels)),
-                B=B,
-                b=b,
-            )
+        return self._step(
+            Predictor,
+            random_effects,
+            levels=levels,
+            q=q,
+            W=W or dist.Dirichlet(torch.ones(levels)),
+            B=B,
+            b=b,
         )
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
-        return Predictor(self._pipeline.apply(activation, fn=fn))
+        return self._step(Predictor, activation, fn=fn)
 
     @step
     def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
-        return Predictor(self._pipeline.apply(projection, output=output, weight=weight))
+        return self._step(Predictor, projection, output=output, weight=weight)
 
     @step
     def tokenize(
@@ -267,10 +240,12 @@ class Predictor(_FamilyPipeline):
         weight: Prior = UNIT_NORMAL,
         temperature: float | Tensor = 1.0,
     ) -> Predictor:
-        return Predictor(
-            self._pipeline.apply(
-                tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature
-            )
+        return self._step(
+            Predictor,
+            tokenize,
+            vocab_size=vocab_size,
+            weight=weight,
+            temperature=temperature,
         )
 
 

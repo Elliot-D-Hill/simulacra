@@ -13,7 +13,6 @@ def test_simulation_has_no_downstream_methods(dims: tuple[int, int, int, int]) -
     assert not hasattr(sim, "tokenize")
     assert not hasattr(sim, "missing_y")
     assert not hasattr(sim, "gaussian")
-    assert not hasattr(sim, "draw")
 
 
 def test_predictor_methods(dims: tuple[int, int, int, int]) -> None:
@@ -98,7 +97,6 @@ def test_self_transition_preserves_methods(dims: tuple[int, int, int, int]) -> N
     assert hasattr(sim, "min_max_scale")
     assert hasattr(sim, "fixed_effects")
     assert not hasattr(sim, "gaussian")
-    assert not hasattr(sim, "draw")
 
 
 # --- pipeline ---
