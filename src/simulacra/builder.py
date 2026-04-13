@@ -432,9 +432,17 @@ class Predictor(_FamilyPipeline):
         return result
 
     @step
-    def tokenize(self, vocab_size: int) -> Predictor:
+    def tokenize(
+        self,
+        vocab_size: int,
+        weight: Prior = UNIT_NORMAL,
+        temperature: float | Tensor = 1.0,
+    ) -> Predictor:
         return self._chain(
-            _compose(self._run, lambda data: tokenize(data, vocab_size)),
+            _compose(
+                self._run,
+                lambda data: tokenize(data, vocab_size, weight, temperature),
+            ),
             (*self._recipe, _label(tokenize, vocab_size=vocab_size)),
         )
 

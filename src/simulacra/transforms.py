@@ -108,11 +108,14 @@ def projection(
     data: PredictorData, output: int, weight: Prior
 ) -> tuple[PredictorData, Params]:
     *batch, _, _, k_in = data.eta.shape
-    w = resolve(weight, (*batch, k_in, output))
-    return replace(data, eta=data.eta @ w.unsqueeze(-3)), {"weight": w}
+    w = resolve(weight, (*batch, 1, k_in, output))
+    return replace(data, eta=data.eta @ w), {"weight": w.squeeze(-3)}
 
 
-def tokenize[S: PredictorData](data: S, vocab_size: int) -> tuple[S, Params]:
-    weight = torch.randn(data.eta.shape[-1], vocab_size)
-    prob = torch.softmax(data.eta @ weight, dim=-1)
-    return replace(data, tokens=resolve(dist.Categorical(prob))), {}
+def tokenize[S: PredictorData](
+    data: S, vocab_size: int, weight: Prior, temperature: float | Tensor = 1.0
+) -> tuple[S, Params]:
+    *batch, _, _, k_in = data.eta.shape
+    w = resolve(weight, (*batch, 1, k_in, vocab_size))
+    logits = data.eta @ w / temperature
+    return replace(data, tokens=dist.Categorical(logits=logits).sample()), {"weight": w.squeeze(-3)}
