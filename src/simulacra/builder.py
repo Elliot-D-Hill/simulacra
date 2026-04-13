@@ -31,18 +31,16 @@ from .states import (
     PredictorData,
     Prior,
     ResponseData,
-    SimulationData,
-    SimulationParams,
     SurvivalData,
 )
 from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
     Pipeline,
-    label,
     activation,
     chain,
     covariates,
     fixed_effects,
+    label,
     min_max_scale,
     missing_x,
     missing_y,
@@ -50,7 +48,6 @@ from .transforms import (
     projection,
     random_effects,
     resolve_design,
-    suffixed,
     tokenize,
     z_score,
 )
@@ -93,7 +90,7 @@ class Simulation:
             draws=(), n=n, t=t, p=p, X=UNIT_NORMAL, coordinates=coordinates
         )
         self._pipeline = Pipeline(
-            run=lambda draws: (replace(initial, draws=draws), {}),
+            run=lambda draws: replace(initial, draws=draws),
             recipe=(f"Simulation(n={n}, t={t}, p={p})",),
         )
 
@@ -150,16 +147,11 @@ class _Pipeline[S: PredictorData]:
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
 
-    def draw(
-        self, draws: int | None = None, seed: int | None = None
-    ) -> tuple[SimulationData, SimulationParams]:
+    def draw(self, draws: int | None = None, seed: int | None = None) -> S:
         if seed is not None:
             torch.manual_seed(seed)  # type: ignore[no-untyped-call]
         batch = (draws,) if draws is not None else ()
-        data, params = self._pipeline.run(batch)
-        tensor_data = {k: v for k, v in vars(data).items() if v is not None}
-        squeezed = {k: v.squeeze(-2) for k, v in tensor_data.items()}
-        return SimulationData(squeezed), SimulationParams(params)
+        return self._pipeline.run(batch)
 
 
 class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
@@ -310,17 +302,6 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
 
 
 class Predictor(_FamilyPipeline):
-    def __init__(
-        self,
-        pipeline: Pipeline[PredictorData],
-        *,
-        re_count: int = 0,
-        proj_count: int = 0,
-    ) -> None:
-        super().__init__(pipeline)
-        self._re_count = re_count
-        self._proj_count = proj_count
-
     @step
     def random_effects(
         self,
@@ -333,37 +314,21 @@ class Predictor(_FamilyPipeline):
     ) -> Predictor:
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
-        step_fn = suffixed(
-            partial(random_effects, levels=levels, q=q, W=w, B=B, b=b), self._re_count
-        )
-        return Predictor(
-            self._pipeline.then(
-                step_fn, label(random_effects, levels=levels, q=q, W=w, B=B, b=b)
-            ),
-            re_count=self._re_count + 1,
-            proj_count=self._proj_count,
-        )
+        return Predictor(self._pipeline.apply(
+            random_effects, levels=levels, q=q, W=w, B=B, b=b,
+        ))
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
         return Predictor(
-            self._pipeline.then(partial(activation, fn=fn), label(activation)),
-            re_count=self._re_count,
-            proj_count=self._proj_count,
+            self._pipeline.then(partial(activation, fn=fn), label(activation))
         )
 
     @step
     def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
-        step_fn = suffixed(
-            partial(projection, output=output, weight=weight), self._proj_count
-        )
-        return Predictor(
-            self._pipeline.then(
-                step_fn, label(projection, output=output, weight=weight)
-            ),
-            re_count=self._re_count,
-            proj_count=self._proj_count + 1,
-        )
+        return Predictor(self._pipeline.apply(
+            projection, output=output, weight=weight,
+        ))
 
     @step
     def tokenize(
@@ -372,14 +337,9 @@ class Predictor(_FamilyPipeline):
         weight: Prior = UNIT_NORMAL,
         temperature: float | Tensor = 1.0,
     ) -> Predictor:
-        step_fn = partial(
-            tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature
-        )
-        return Predictor(
-            self._pipeline.then(step_fn, label(tokenize, vocab_size=vocab_size)),
-            re_count=self._re_count,
-            proj_count=self._proj_count,
-        )
+        return Predictor(self._pipeline.apply(
+            tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature,
+        ))
 
     @step
     def constant_target(self) -> ConstantPredictor:

@@ -123,85 +123,90 @@ def test_simulation_configurators(dims: tuple[int, int, int, int]) -> None:
 def test_reproducibility(dims: tuple[int, int, int, int]) -> None:
     """Same seed produces identical draws."""
     N, T, p, k = dims
-    data1, _ = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
-    data2, _ = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
-    assert data1["y"].equal(data2["y"])
+    data1 = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
+    data2 = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
+    assert data1.y.equal(data2.y)
 
 
 def test_immutability(dims: tuple[int, int, int, int]) -> None:
     """Branching from a shared base reuses X but produces different y."""
     N, T, p, k = dims
     base = Simulation(N, T, p).fixed_effects(k=k)
-    da, _ = base.gaussian().draw(seed=0)
-    db, _ = base.poisson().draw(seed=0)
-    assert da["X"].equal(db["X"])
-    assert not da["y"].equal(db["y"])
+    da = base.gaussian().draw(seed=0)
+    db = base.poisson().draw(seed=0)
+    assert da.X.equal(db.X)
+    assert not da.y.equal(db.y)
 
 
 def test_base_shape(dims: tuple[int, int, int, int]) -> None:
     """draws=None gives [N, T, ...] shape."""
     N, T, p, k = dims
-    data, _ = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
-    assert data["X"].shape == (N, T, p)
-    assert data["y"].shape == (N, T, k)
+    data = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
+    assert data.X.shape == (N, T, p)
+    assert data.y.shape == (N, T, k)
 
 
 def test_draws_shape(dims: tuple[int, int, int, int]) -> None:
-    """draws=D adds a leading dimension to data and params."""
+    """draws=D adds a leading dimension."""
     N, T, p, k = dims
     D = 7
-    sim = Simulation(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0)
-    data, params = sim.draw(seed=0, draws=D)
-    assert data["X"].shape == (D, N, T, p)
-    assert params["beta"].shape == (D, p, k)
-    assert data["y"].shape == (D, N, T, k)
-    assert data["event_time"].shape == (D, N, T, k)
+    data = (
+        Simulation(N, T, p)
+        .fixed_effects(k=k)
+        .weibull()
+        .censor(horizon=2.0)
+        .draw(seed=0, draws=D)
+    )
+    assert data.X.shape == (D, N, T, p)
+    assert data.beta is not None and data.beta.shape == (D, p, k)
+    assert data.y.shape == (D, N, T, k)
+    assert data.event_time.shape == (D, N, T, k)
 
 
 def test_draws_independent(dims: tuple[int, int, int, int]) -> None:
     """Draws along the leading dimension are independent."""
     N, T, p, k = dims
-    data, _ = (
+    data = (
         Simulation(N, T, p)
         .fixed_effects(k=k)
         .weibull()
         .censor(horizon=2.0)
         .draw(seed=0, draws=7)
     )
-    assert not data["y"][0].equal(data["y"][1])
+    assert not data.y[0].equal(data.y[1])
 
 
 def test_draws_none_base_shape(dims: tuple[int, int, int, int]) -> None:
     """draws=None on a full pipeline gives base shape."""
     N, T, p, k = dims
-    data, _ = (
+    data = (
         Simulation(N, T, p)
         .fixed_effects(k=k)
         .weibull()
         .censor(horizon=2.0)
         .draw(seed=0)
     )
-    assert data["y"].shape == (N, T, k)
+    assert data.y.shape == (N, T, k)
 
 
 def test_concrete_tensor_prior(dims: tuple[int, int, int, int]) -> None:
     """A concrete tensor passed as X via covariates flows through unchanged."""
     N, T, p, k = dims
     X_fixed = torch.ones(N, T, p)
-    data, _ = (
+    data = (
         Simulation(N, T, p)
         .covariates(X=X_fixed)
         .fixed_effects(k=k)
         .gaussian()
         .draw(seed=0)
     )
-    assert data["X"].equal(X_fixed)
+    assert data.X.equal(X_fixed)
 
 
 def test_full_chain(dims: tuple[int, int, int, int]) -> None:
-    """Full pipeline produces all expected keys."""
+    """Full pipeline produces all expected fields."""
     N, T, p, k = dims
-    data, params = (
+    data = (
         Simulation(N, T, p)
         .fixed_effects(k=k)
         .tokenize(vocab_size=50)
@@ -211,5 +216,7 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
         .missing_y(0.2)
         .draw(seed=1)
     )
-    assert "y" in data and "event_time" in data and "censor_time" in data
-    assert "beta" in params
+    assert data.y.numel() > 0
+    assert data.event_time.numel() > 0
+    assert data.censor_time.numel() > 0
+    assert data.beta is not None

@@ -13,22 +13,22 @@ from .states import (
     SurvivalData,
     promote,
 )
-from .transforms import Params, resolve
+from .transforms import resolve
 
 EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 
-def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:
+def competing_risks(data: ResponseData) -> EventTimeData:
     min_time, min_idx = data.y.min(dim=-1)  # [N, T]
     is_winner = F.one_hot(min_idx, data.y.shape[-1]).bool()  # [N, T, K]
     event_time = torch.where(is_winner, data.y, torch.inf)
     censor_time = torch.where(is_winner, torch.inf, min_time.unsqueeze(-1))
-    return promote(EventTimeData, data, event_time=event_time, censor_time=censor_time), {}
+    return promote(EventTimeData, data, event_time=event_time, censor_time=censor_time)
 
 
 def censor(
     data: ResponseData, dropout: Prior, *, horizon: float | Tensor = torch.inf
-) -> tuple[SurvivalData, Params]:
+) -> SurvivalData:
     event_time = getattr(data, "event_time", data.y)
     prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
     absolute = resolve(dropout, (*event_time.shape[:-2], 1, 1))
@@ -45,12 +45,10 @@ def censor(
         indicator=indicator,
         observed_time=observed_time,
         time_to_event=time_to_event,
-    ), {}
+    )
 
 
-def discretize(
-    data: SurvivalData, boundaries: Tensor
-) -> tuple[DiscreteSurvivalData, Params]:
+def discretize(data: SurvivalData, boundaries: Tensor) -> DiscreteSurvivalData:
     interval_start = boundaries[:-1]  # [J]
     interval_end = boundaries[1:]  # [J]
     interval_width = interval_end - interval_start  # [J]
@@ -60,4 +58,4 @@ def discretize(
     indicator = data.indicator.unsqueeze(-1).to(exposure.dtype)  # [..., K, 1]
     mask = indicator * in_interval.to(exposure.dtype) + (1.0 - indicator)
     discrete = exposure * mask  # [..., K, J]
-    return promote(DiscreteSurvivalData, data, discrete_event_time=discrete), {}
+    return promote(DiscreteSurvivalData, data, discrete_event_time=discrete)
