@@ -158,7 +158,7 @@ def test_draws_shape(dims: tuple[int, int, int, int]) -> None:
         .draw(seed=0, draws=D)
     )
     assert data.X.shape == (D, N, T, p)
-    assert data.beta is not None and data.beta.shape == (D, p, k)
+    assert data.beta.shape == (D, p, k)
     assert data.y.shape == (D, N, T, k)
     assert data.event_time.shape == (D, N, T, k)
 
@@ -219,4 +219,4 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
     assert data.y.numel() > 0
     assert data.event_time.numel() > 0
     assert data.censor_time.numel() > 0
-    assert data.beta is not None
+    assert data.beta.numel() > 0

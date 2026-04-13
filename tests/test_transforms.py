@@ -360,7 +360,8 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
     eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W_test, B_test, b_test)
     coordinates = torch.arange(T, dtype=torch.float).unsqueeze(-1).expand(N, T, 1)
     base_data = PredictorData(
-        X=torch.empty(0), coordinates=coordinates, eta=torch.zeros(N, T, k)
+        X=torch.empty(0), coordinates=coordinates,
+        eta=torch.zeros(N, T, k), beta=torch.empty(0),
     )
     re_data = random_effects(base_data, L, q, W_test, B_test, b_test)
     assert eta_manual.equal(re_data.eta)

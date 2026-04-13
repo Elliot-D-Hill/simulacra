@@ -32,7 +32,7 @@ class RandomEffect:
 @dataclass(frozen=True)
 class PredictorData(CovariateData):
     eta: Tensor  # [*draws, N, T, K]
-    beta: Tensor | None = None  # [*batch, p, K]
+    beta: Tensor  # [*batch, p, K]
     tokens: Tensor | None = None  # [N, T]
     token_weight: Tensor | None = None  # [*batch, K_in, vocab_size]
     random_effect: tuple[RandomEffect, ...] = ()
