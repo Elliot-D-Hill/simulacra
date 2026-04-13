@@ -28,7 +28,7 @@ def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:
 
 
 def censor(
-    data: ResponseData, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
+    data: ResponseData, dropout: Prior, *, horizon: float | Tensor = torch.inf
 ) -> tuple[SurvivalData, Params]:
     event_time = getattr(data, "event_time", data.y)
     prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
