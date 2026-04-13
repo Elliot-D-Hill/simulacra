@@ -85,19 +85,17 @@ def missing_y[S: ResponseData](data: S, proportion: float) -> tuple[S, Params]:
 def min_max_scale[S: CovariateData](
     data: S, low: float = 0.0, high: float = 1.0
 ) -> tuple[S, Params]:
-    X = data.X
-    data_low = X.amin(dim=(-3, -2), keepdim=True)
-    data_high = X.amax(dim=(-3, -2), keepdim=True)
+    data_low = data.X.amin(dim=(-3, -2), keepdim=True)
+    data_high = data.X.amax(dim=(-3, -2), keepdim=True)
     span = (data_high - data_low).clamp(min=1e-8)
-    scaled = low + (X - data_low) / span * (high - low)
+    scaled = low + (data.X - data_low) / span * (high - low)
     return replace(data, X=scaled), {}
 
 
 def z_score[S: CovariateData](data: S) -> tuple[S, Params]:
-    X = data.X
-    mean = X.mean(dim=(-3, -2), keepdim=True)
-    std = X.std(dim=(-3, -2), keepdim=True).clamp(min=1e-8)
-    return replace(data, X=(X - mean) / std), {}
+    mean = data.X.mean(dim=(-3, -2), keepdim=True)
+    std = data.X.std(dim=(-3, -2), keepdim=True).clamp(min=1e-8)
+    return replace(data, X=(data.X - mean) / std), {}
 
 
 def activation(

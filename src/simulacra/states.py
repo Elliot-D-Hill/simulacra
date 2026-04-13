@@ -53,9 +53,7 @@ class DiscreteSurvivalData(SurvivalData):
 
 class _TensorDict(dict[str, Tensor]):
     def __repr__(self) -> str:
-        fields = "\n".join(
-            f"    {k}: {list(v.shape)}" for k, v in self.items()
-        )
+        fields = "\n".join(f"    {k}: {list(v.shape)}" for k, v in self.items())
         return f"{type(self).__name__}(\n{fields}\n)"
 
 

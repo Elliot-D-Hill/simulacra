@@ -18,10 +18,9 @@ EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 
 def competing_risks(data: ResponseData) -> tuple[EventTimeData, Params]:
-    latent = data.y  # [N, T, K]
-    min_time, min_idx = latent.min(dim=-1)  # [N, T]
-    is_winner = F.one_hot(min_idx, latent.shape[-1]).bool()  # [N, T, K]
-    event_time = torch.where(is_winner, latent, torch.inf)
+    min_time, min_idx = data.y.min(dim=-1)  # [N, T]
+    is_winner = F.one_hot(min_idx, data.y.shape[-1]).bool()  # [N, T, K]
+    event_time = torch.where(is_winner, data.y, torch.inf)
     censor_time = torch.where(is_winner, torch.inf, min_time.unsqueeze(-1))
     return EventTimeData(
         **vars(data), event_time=event_time, censor_time=censor_time

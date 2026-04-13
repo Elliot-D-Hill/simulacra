@@ -80,9 +80,7 @@ def gompertz(data: PredictorData, shape: float | Tensor) -> tuple[ResponseData, 
     return ResponseData(**vars(data), y=y), {}
 
 
-def constant_target(
-    data: PredictorData, family: Family
-) -> tuple[ResponseData, Params]:
+def constant_target(data: PredictorData, family: Family) -> tuple[ResponseData, Params]:
     """Pool eta over T, sample once per subject, broadcast y back."""
     pooled = replace(data, eta=data.eta.mean(dim=-2, keepdim=True))
     result, params = family(pooled)
