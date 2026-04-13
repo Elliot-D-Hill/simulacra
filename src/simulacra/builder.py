@@ -37,10 +37,10 @@ from .states import (
 )
 from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
-    Run,
+    Pipeline,
+    _label,
     activation,
     chain,
-    compose,
     covariates,
     fixed_effects,
     min_max_scale,
@@ -59,50 +59,31 @@ UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
 
 
-def _label(fn: Callable[..., object], **kwargs: object) -> str:
-    def _format(v: object) -> str:
-        if isinstance(v, Tensor):
-            return (
-                f"tensor({v.item():.4g})" if v.ndim == 0 else f"Tensor{tuple(v.shape)}"
-            )
-        return repr(v)
-
-    parts = ", ".join(f"{k}={_format(v)}" for k, v in kwargs.items())
-    return f"{fn.__name__}({parts})"
-
-
 def _identity[T](x: T) -> T:
     return x
 
 
 class Covariate:
-    def __init__(self, run: Run[CovariateData], recipe: tuple[str, ...] = ()) -> None:
-        self._run = run
-        self._recipe = recipe
+    def __init__(self, pipeline: Pipeline[CovariateData]) -> None:
+        self._pipeline = pipeline
 
     def __repr__(self) -> str:
-        return "\n  .".join(self._recipe) or type(self).__name__
+        return "\n  .".join(self._pipeline.recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
 
     @step
     def z_score(self) -> Self:
-        return type(self)(compose(self._run, z_score), (*self._recipe, _label(z_score)))
+        return type(self)(self._pipeline.apply(z_score))
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Self:
-        return type(self)(
-            compose(self._run, partial(min_max_scale, low=low, high=high)),
-            (*self._recipe, _label(min_max_scale, low=low, high=high)),
-        )
+        return type(self)(self._pipeline.apply(min_max_scale, low=low, high=high))
 
     @step
-    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
-        return Predictor(
-            compose(self._run, partial(fixed_effects, k=k, beta=beta)),
-            (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
-        )
+    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> "Predictor":
+        return Predictor(self._pipeline.apply(fixed_effects, k=k, beta=beta))
 
 
 class Simulation:
@@ -111,70 +92,60 @@ class Simulation:
         initial = InitialData(
             draws=(), n=n, t=t, p=p, X=UNIT_NORMAL, coordinates=coordinates
         )
-        self._run: Run[InitialData] = lambda draws: (replace(initial, draws=draws), {})
-        self._recipe = (f"Simulation(n={n}, t={t}, p={p})",)
+        self._pipeline = Pipeline(
+            run=lambda draws: (replace(initial, draws=draws), {}),
+            recipe=(f"Simulation(n={n}, t={t}, p={p})",),
+        )
 
     @classmethod
-    def _from_run(cls, run: Run[InitialData], recipe: tuple[str, ...]) -> Self:
+    def _from_pipeline(cls, pipeline: Pipeline[InitialData]) -> Self:
         obj = cls.__new__(cls)
-        obj._run = run
-        obj._recipe = recipe
+        obj._pipeline = pipeline
         return obj
 
     def __repr__(self) -> str:
-        return "\n  .".join(self._recipe) or type(self).__name__
+        return "\n  .".join(self._pipeline.recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
 
     @step
     def covariates(self, X: Prior = UNIT_NORMAL) -> Self:
-        return type(self)._from_run(
-            compose(self._run, partial(covariates, X=X)),
-            (*self._recipe, _label(covariates, X=X)),
-        )
+        return type(self)._from_pipeline(self._pipeline.apply(covariates, X=X))
 
     @step
     def points(self, coordinates: Prior = EXP1) -> Self:
-        return type(self)._from_run(
-            compose(self._run, partial(points, coordinates=coordinates)),
-            (*self._recipe, _label(points, coordinates=coordinates)),
+        return type(self)._from_pipeline(
+            self._pipeline.apply(points, coordinates=coordinates)
         )
 
     @step
     def z_score(self) -> Covariate:
         return Covariate(
-            compose(self._run, chain(resolve_design, z_score)),
-            (*self._recipe, _label(z_score)),
+            self._pipeline.then(chain(resolve_design, z_score), _label(z_score))
         )
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
+        step_fn = chain(resolve_design, partial(min_max_scale, low=low, high=high))
         return Covariate(
-            compose(
-                self._run,
-                chain(resolve_design, partial(min_max_scale, low=low, high=high)),
-            ),
-            (*self._recipe, _label(min_max_scale, low=low, high=high)),
+            self._pipeline.then(step_fn, _label(min_max_scale, low=low, high=high))
         )
 
     @step
-    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
+    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> "Predictor":
+        step_fn = chain(resolve_design, partial(fixed_effects, k=k, beta=beta))
         return Predictor(
-            compose(
-                self._run, chain(resolve_design, partial(fixed_effects, k=k, beta=beta))
-            ),
-            (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
+            self._pipeline.then(step_fn, _label(fixed_effects, k=k, beta=beta))
         )
 
 
 class _Pipeline[S: PredictorData]:
-    def __init__(self, run: Run[S], recipe: tuple[str, ...] = ()) -> None:
-        self._run = run
-        self._recipe = recipe
+    def __init__(self, pipeline: Pipeline[S]) -> None:
+        self._pipeline = pipeline
 
     def __repr__(self) -> str:
-        return "\n  .".join(self._recipe) or type(self).__name__
+        return "\n  .".join(self._pipeline.recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
@@ -185,7 +156,7 @@ class _Pipeline[S: PredictorData]:
         if seed is not None:
             torch.manual_seed(seed)  # type: ignore[no-untyped-call]
         batch = (draws,) if draws is not None else ()
-        data, params = self._run(batch)
+        data, params = self._pipeline.run(batch)
         tensor_data = {k: v for k, v in vars(data).items() if v is not None}
         squeezed = {k: v.squeeze(-2) for k, v in tensor_data.items()}
         return SimulationData(squeezed), SimulationParams(params)
@@ -194,17 +165,11 @@ class _Pipeline[S: PredictorData]:
 class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
     @step
     def missing_x(self, proportion: float) -> Self:
-        return type(self)(
-            compose(self._run, partial(missing_x, proportion=proportion)),
-            (*self._recipe, _label(missing_x, proportion=proportion)),
-        )
+        return type(self)(self._pipeline.apply(missing_x, proportion=proportion))
 
     @step
     def missing_y(self, proportion: float) -> Self:
-        return type(self)(
-            compose(self._run, partial(missing_y, proportion=proportion)),
-            (*self._recipe, _label(missing_y, proportion=proportion)),
-        )
+        return type(self)(self._pipeline.apply(missing_y, proportion=proportion))
 
 
 class Response(_ResponsePipeline[ResponseData]): ...
@@ -213,18 +178,14 @@ class Response(_ResponsePipeline[ResponseData]): ...
 class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     @step
     def competing_risks(self) -> "CompetingResponse":
-        return CompetingResponse(
-            compose(self._run, competing_risks),
-            (*self._recipe, _label(competing_risks)),
-        )
+        return CompetingResponse(self._pipeline.apply(competing_risks))
 
     @step
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> Survival:
+    ) -> "Survival":
         return Survival(
-            compose(self._run, partial(censor, dropout=dropout, horizon=horizon)),
-            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
+            self._pipeline.apply(censor, dropout=dropout, horizon=horizon)
         )
 
 
@@ -232,19 +193,17 @@ class CompetingResponse(_ResponsePipeline[EventTimeData]):
     @step
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> Survival:
+    ) -> "Survival":
         return Survival(
-            compose(self._run, partial(censor, dropout=dropout, horizon=horizon)),
-            (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
+            self._pipeline.apply(censor, dropout=dropout, horizon=horizon)
         )
 
 
 class Survival(_ResponsePipeline[SurvivalData]):
     @step
-    def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
+    def discretize(self, boundaries: Tensor) -> "DiscreteSurvival":
         return DiscreteSurvival(
-            compose(self._run, partial(discretize, boundaries=boundaries)),
-            (*self._recipe, _label(discretize, boundaries=boundaries)),
+            self._pipeline.apply(discretize, boundaries=boundaries)
         )
 
 
@@ -254,11 +213,10 @@ class DiscreteSurvival(_ResponsePipeline[DiscreteSurvivalData]): ...
 class _FamilyPipeline(_Pipeline[PredictorData]):
     def __init__(
         self,
-        run: Run[PredictorData],
-        recipe: tuple[str, ...] = (),
+        pipeline: Pipeline[PredictorData],
         wrap: Callable[[Family], Family] = _identity,
     ) -> None:
-        super().__init__(run, recipe)
+        super().__init__(pipeline)
         self._wrap = wrap
 
     @overload
@@ -273,7 +231,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
         label: str,
         cls: type[_ResponsePipeline[ResponseData]] = Response,
     ) -> _ResponsePipeline[ResponseData]:
-        return cls(compose(self._run, self._wrap(family)), (*self._recipe, label))
+        return cls(self._pipeline.then(self._wrap(family), label))
 
     @step
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
@@ -358,16 +316,16 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
 
 
 class Predictor(_FamilyPipeline):
-    def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
-        super().__init__(run, recipe)
-        self._re_count: int = 0
-        self._proj_count: int = 0
-
-    def _chain(self, run: Run[PredictorData], recipe: tuple[str, ...]) -> Predictor:
-        result = Predictor(run, recipe)
-        result._re_count = self._re_count
-        result._proj_count = self._proj_count
-        return result
+    def __init__(
+        self,
+        pipeline: Pipeline[PredictorData],
+        *,
+        re_count: int = 0,
+        proj_count: int = 0,
+    ) -> None:
+        super().__init__(pipeline)
+        self._re_count = re_count
+        self._proj_count = proj_count
 
     @step
     def random_effects(
@@ -378,41 +336,43 @@ class Predictor(_FamilyPipeline):
         W: Prior | None = None,
         B: Prior = UNIT_NORMAL,
         b: Prior = UNIT_NORMAL,
-    ) -> Predictor:
-        index = self._re_count
+    ) -> "Predictor":
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
-        result = self._chain(
-            compose(
-                self._run,
-                suffixed(
-                    partial(random_effects, levels=levels, q=q, W=w, B=B, b=b), index
-                ),
-            ),
-            (*self._recipe, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)),
+        step_fn = suffixed(
+            partial(random_effects, levels=levels, q=q, W=w, B=B, b=b),
+            self._re_count,
         )
-        result._re_count = index + 1
-        return result
-
-    @step
-    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
-        return self._chain(
-            compose(self._run, partial(activation, fn=fn)),
-            (*self._recipe, _label(activation)),
+        return Predictor(
+            self._pipeline.then(
+                step_fn, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)
+            ),
+            re_count=self._re_count + 1,
+            proj_count=self._proj_count,
         )
 
     @step
-    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
-        index = self._proj_count
-        result = self._chain(
-            compose(
-                self._run,
-                suffixed(partial(projection, output=output, weight=weight), index),
-            ),
-            (*self._recipe, _label(projection, output=output, weight=weight)),
+    def activation(
+        self, fn: Callable[[Tensor], Tensor] = torch.relu
+    ) -> "Predictor":
+        return Predictor(
+            self._pipeline.then(partial(activation, fn=fn), _label(activation)),
+            re_count=self._re_count,
+            proj_count=self._proj_count,
         )
-        result._proj_count = index + 1
-        return result
+
+    @step
+    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> "Predictor":
+        step_fn = suffixed(
+            partial(projection, output=output, weight=weight), self._proj_count
+        )
+        return Predictor(
+            self._pipeline.then(
+                step_fn, _label(projection, output=output, weight=weight)
+            ),
+            re_count=self._re_count,
+            proj_count=self._proj_count + 1,
+        )
 
     @step
     def tokenize(
@@ -420,28 +380,28 @@ class Predictor(_FamilyPipeline):
         vocab_size: int,
         weight: Prior = UNIT_NORMAL,
         temperature: float | Tensor = 1.0,
-    ) -> Predictor:
-        return self._chain(
-            compose(
-                self._run,
-                partial(
-                    tokenize,
-                    vocab_size=vocab_size,
-                    weight=weight,
-                    temperature=temperature,
-                ),
-            ),
-            (*self._recipe, _label(tokenize, vocab_size=vocab_size)),
+    ) -> "Predictor":
+        step_fn = partial(
+            tokenize,
+            vocab_size=vocab_size,
+            weight=weight,
+            temperature=temperature,
+        )
+        return Predictor(
+            self._pipeline.then(step_fn, _label(tokenize, vocab_size=vocab_size)),
+            re_count=self._re_count,
+            proj_count=self._proj_count,
         )
 
     @step
-    def constant_target(self) -> ConstantPredictor:
-        return ConstantPredictor(self._run, (*self._recipe, _label(constant_target)))
+    def constant_target(self) -> "ConstantPredictor":
+        recipe = (*self._pipeline.recipe, _label(constant_target))
+        return ConstantPredictor(Pipeline(self._pipeline.run, recipe))
 
 
 class ConstantPredictor(_FamilyPipeline):
-    def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
-        super().__init__(run, recipe, wrap=lambda f: partial(constant_target, family=f))
+    def __init__(self, pipeline: Pipeline[PredictorData]) -> None:
+        super().__init__(pipeline, wrap=lambda f: partial(constant_target, family=f))
 
 
 GRAPH: Final[Graph] = build_graph(

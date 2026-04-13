@@ -1,5 +1,6 @@
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from functools import partial
 
 import torch
 import torch.distributions as dist
@@ -9,7 +10,7 @@ from .states import CovariateData, InitialData, PredictorData, Prior, ResponseDa
 
 type Params = dict[str, Tensor]
 type Step[S, T] = Callable[[S], tuple[T, Params]]
-type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
+type Run[S] = Step[tuple[int, ...], S]
 
 
 def chain[S, M, T](first: Step[S, M], second: Step[M, T]) -> Step[S, T]:
@@ -21,21 +22,41 @@ def chain[S, M, T](first: Step[S, M], second: Step[M, T]) -> Step[S, T]:
     return chained
 
 
-def compose[S, T](prev: Run[S], step: Step[S, T]) -> Run[T]:
-    def run(draws: tuple[int, ...]) -> tuple[T, Params]:
-        data, params = prev(draws)
-        new_data, new_params = step(data)
-        return new_data, {**params, **new_params}
-
-    return run
-
-
 def suffixed[S, T](fn: Step[S, T], index: int) -> Step[S, T]:
     def wrapped(data: S) -> tuple[T, Params]:
         new_data, params = fn(data)
         return new_data, {f"{k}_{index}": v for k, v in params.items()}
 
     return wrapped
+
+
+def _format(v: object) -> str:
+    if isinstance(v, Tensor):
+        return f"tensor({v.item():.4g})" if v.ndim == 0 else f"Tensor{tuple(v.shape)}"
+    return repr(v)
+
+
+def _label(fn: Callable[..., object], **kwargs: object) -> str:
+    parts = ", ".join(f"{k}={_format(v)}" for k, v in kwargs.items())
+    return f"{fn.__name__}({parts})"
+
+
+@dataclass(frozen=True)
+class Pipeline[S]:
+    run: Run[S]
+    recipe: tuple[str, ...]
+
+    def then[T](self, step: Step[S, T], label: str) -> "Pipeline[T]":
+        return Pipeline(chain(self.run, step), (*self.recipe, label))
+
+    def apply[T](
+        self, fn: Callable[..., tuple[T, Params]], **kwargs: object
+    ) -> "Pipeline[T]":
+        step = partial(fn, **kwargs) if kwargs else fn
+        return Pipeline(chain(self.run, step), (*self.recipe, _label(fn, **kwargs)))
+
+    def __repr__(self) -> str:
+        return "\n  .".join(self.recipe) or "Pipeline"
 
 
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:

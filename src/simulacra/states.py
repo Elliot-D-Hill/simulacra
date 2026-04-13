@@ -63,3 +63,7 @@ class SimulationData(_TensorDict):
 
 class SimulationParams(_TensorDict):
     pass
+
+
+def promote[T](cls: type[T], parent: object, **fields: object) -> T:
+    return cls(**{**vars(parent), **fields})

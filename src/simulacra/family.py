@@ -4,7 +4,7 @@ import torch
 import torch.distributions as dist
 from torch import Tensor
 
-from .states import PredictorData, Prior, ResponseData
+from .states import PredictorData, Prior, ResponseData, promote
 from .transforms import Params, Step, resolve
 
 type Family = Step[PredictorData, ResponseData]
@@ -16,52 +16,52 @@ def gaussian(data: PredictorData, covariance: Prior) -> tuple[ResponseData, Para
     if covariance.ndim < 2:
         covariance = covariance * torch.eye(K)
     y = resolve(dist.MultivariateNormal(data.eta, covariance))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def poisson(data: PredictorData) -> tuple[ResponseData, Params]:
     y = resolve(dist.Poisson(data.eta.exp()))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def bernoulli(data: PredictorData) -> tuple[ResponseData, Params]:
     y = resolve(dist.Binomial(total_count=1, logits=data.eta))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def binomial(data: PredictorData, num_trials: int) -> tuple[ResponseData, Params]:
     y = resolve(dist.Binomial(total_count=num_trials, logits=data.eta))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def negative_binomial(
     data: PredictorData, concentration: float | Tensor
 ) -> tuple[ResponseData, Params]:
     y = resolve(dist.NegativeBinomial(concentration, logits=data.eta))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def gamma(
     data: PredictorData, concentration: float | Tensor
 ) -> tuple[ResponseData, Params]:
     y = resolve(dist.Gamma(concentration, data.eta.exp().reciprocal()))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def log_normal(data: PredictorData, std: float | Tensor) -> tuple[ResponseData, Params]:
     y = resolve(dist.LogNormal(data.eta, std))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def categorical(data: PredictorData) -> tuple[ResponseData, Params]:
     y = resolve(dist.Multinomial(total_count=1, logits=data.eta))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def weibull(data: PredictorData, shape: float | Tensor) -> tuple[ResponseData, Params]:
     scale = data.eta.exp().reciprocal()
     y = resolve(dist.Weibull(scale, shape))
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def log_logistic(
@@ -70,14 +70,14 @@ def log_logistic(
     scale = data.eta.exp().reciprocal()
     u = torch.rand_like(data.eta)
     y = scale * (u / (1.0 - u)).pow(1.0 / shape)
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def gompertz(data: PredictorData, shape: float | Tensor) -> tuple[ResponseData, Params]:
     rate = data.eta.exp()
     u = torch.rand_like(data.eta)
     y = (1.0 / shape) * torch.log1p(-shape * u.log() / rate)
-    return ResponseData(**vars(data), y=y), {}
+    return promote(ResponseData, data, y=y), {}
 
 
 def constant_target(data: PredictorData, family: Family) -> tuple[ResponseData, Params]:

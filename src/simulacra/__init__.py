@@ -26,7 +26,8 @@ from .states import (
     SimulationParams,
     SurvivalData,
 )
-from .transforms import Run, Step, chain, compose, resolve, suffixed
+from .states import promote
+from .transforms import Pipeline, Run, Step, chain, resolve, suffixed
 
 __all__ = [
     "CompetingResponse",
@@ -40,6 +41,7 @@ __all__ = [
     "GRAPH",
     "Graph",
     "InitialData",
+    "Pipeline",
     "PositiveSupportResponse",
     "Predictor",
     "PredictorData",
@@ -58,7 +60,7 @@ __all__ = [
     "UNIT_VARIANCE",
     "build_graph",
     "chain",
-    "compose",
+    "promote",
     "resolve",
     "step",
     "suffixed",
