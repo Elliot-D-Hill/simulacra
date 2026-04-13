@@ -31,9 +31,16 @@ def _format(v: object) -> str:
             return getattr(v, "__name__", repr(v))
 
 
+_WIDTH = 88
+
+
 def label(transform: Callable[..., object], **kwargs: object) -> str:
-    parts = ", ".join(f"{k}={_format(v)}" for k, v in kwargs.items())
-    return f"{transform.__name__}({parts})"
+    parts = [f"{k}={_format(v)}" for k, v in kwargs.items()]
+    single = f"{transform.__name__}({', '.join(parts)})"
+    if len(single) <= _WIDTH:
+        return single
+    body = ",\n    ".join(parts)
+    return f"{transform.__name__}(\n    {body},\n)"
 
 
 @dataclass(frozen=True)
