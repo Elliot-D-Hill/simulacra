@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import MISSING, dataclass, field, fields
 
 import torch.distributions as dist
 from torch import Tensor
@@ -6,20 +6,45 @@ from torch import Tensor
 type Prior = dist.Distribution | Tensor
 
 
-@dataclass(frozen=True)
+def _format_field(val: object) -> str:
+    match val:
+        case Tensor() if val.ndim == 0:
+            return f"tensor({val.item():.4g})"
+        case Tensor():
+            return str(list(val.shape))
+        case (Tensor(), *_):
+            return "(" + ", ".join(str(list(v.shape)) for v in val) + ",)"
+        case _:
+            return repr(val)
+
+
+def _data_repr(self: object) -> str:
+    parts: list[str] = []
+    for f in fields(self):  # type: ignore[arg-type]
+        val = getattr(self, f.name)
+        if f.default is not MISSING and (val is f.default or val == f.default):
+            continue
+        parts.append(f"    {f.name}: {_format_field(val)}")
+    body = "\n".join(parts)
+    return f"{type(self).__name__}(\n{body}\n)"
+
+
+@dataclass(frozen=True, repr=False)
 class CovariateData:
     X: Tensor  # [*draws, N, T, p]
     coordinates: Tensor  # [*draws, N, T, D]
+    __repr__ = _data_repr
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class RandomEffect:
     W: Tensor  # [*batch, N, 1, levels]
     B: Tensor  # [*batch, N, T, q]
     b: Tensor  # [*batch, levels, q, K]
+    __repr__ = _data_repr
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class PredictorData(CovariateData):
     eta: Tensor  # [*draws, N, T, K]
     beta: Tensor  # [*batch, p, K]
@@ -29,25 +54,25 @@ class PredictorData(CovariateData):
     projection_weight: tuple[Tensor, ...] = ()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class ResponseData(PredictorData):
     y: Tensor = field(default_factory=Tensor)  # [N, T, K]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class EventTimeData(ResponseData):
     event_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
     censor_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class SurvivalData(EventTimeData):
     indicator: Tensor = field(default_factory=Tensor)  # [N, T, K]
     observed_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
     time_to_event: Tensor = field(default_factory=Tensor)  # [N, T, K]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class DiscreteSurvivalData(SurvivalData):
     discrete_event_time: Tensor = field(default_factory=Tensor)  # [N, T, K, J]
 
