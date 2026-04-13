@@ -98,18 +98,18 @@ def test_chained_scalings(dims: tuple[int, int, int, int]) -> None:
     assert torch.allclose(column_mean, torch.zeros(p), atol=1e-5)
 
 
-def test_custom_coordinates(dims: tuple[int, int, int, int]) -> None:
-    """Custom coordinates survive through the pipeline."""
+def test_custom_points(dims: tuple[int, int, int, int]) -> None:
+    """Custom points survive through the pipeline."""
     N, T, p, k = dims
-    custom_coords = torch.linspace(0.0, 10.0, T)
+    custom_points = torch.linspace(0.0, 10.0, T)
     data = (
-        simulate(N, T, p, coordinates=custom_coords)
+        simulate(N, T, p, points=custom_points)
         .fixed_effects(k=k)
         .gaussian()
         .draw(seed=0)
     )
-    expected = custom_coords.unsqueeze(-1).expand(N, T, 1)
-    assert data.coordinates.equal(expected)
+    expected = custom_points.unsqueeze(-1).expand(N, T, 1)
+    assert data.points.equal(expected)
 
 
 # --- missing data ---
@@ -180,7 +180,7 @@ def test_gamma_survival_pipeline(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_censor_time(dims: tuple[int, int, int, int]) -> None:
-    """censor bounds observed times relative to coordinates plus horizon."""
+    """censor bounds observed times relative to points plus horizon."""
     N, T, p, k = dims
     horizon = 2.0
     data = (
@@ -190,7 +190,7 @@ def test_censor_time(dims: tuple[int, int, int, int]) -> None:
         .censor(horizon=horizon)
         .draw(seed=1)
     )
-    bound = data.coordinates[..., :1] + horizon
+    bound = data.points[..., :1] + horizon
     assert (data.censor_time <= bound).all()
 
 
@@ -316,12 +316,9 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
     B_test = torch.randn(N, T, q)
     b_test = torch.randn(L, q, k)
     eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W_test, B_test, b_test)
-    coordinates = torch.arange(T, dtype=torch.float).unsqueeze(-1).expand(N, T, 1)
+    points = torch.arange(T, dtype=torch.float).unsqueeze(-1).expand(N, T, 1)
     base_data = PredictorData(
-        X=torch.empty(0),
-        coordinates=coordinates,
-        eta=torch.zeros(N, T, k),
-        beta=torch.empty(0),
+        X=torch.empty(0), points=points, eta=torch.zeros(N, T, k), beta=torch.empty(0)
     )
     re_data = random_effects(base_data, L, q, W_test, B_test, b_test)
     assert eta_manual.equal(re_data.eta)

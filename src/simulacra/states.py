@@ -32,7 +32,7 @@ def _data_repr(self: object) -> str:
 @dataclass(frozen=True, repr=False)
 class CovariateData:
     X: Tensor  # [*draws, N, T, p]
-    coordinates: Tensor  # [*draws, N, T, D]
+    points: Tensor  # [*draws, N, T, D]
     __repr__ = _data_repr
 
 

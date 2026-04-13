@@ -86,26 +86,23 @@ class Simulation(_Pipeline[CovariateData]):
 
 
 def simulate(
-    n: int, t: int = 1, p: int = 1, X: Prior = UNIT_NORMAL, coordinates: Prior = EXP1
+    n: int, t: int = 1, p: int = 1, X: Prior = UNIT_NORMAL, points: Prior = EXP1
 ) -> Simulation:
     def run(draws: tuple[int, ...]) -> CovariateData:
         basis = resolve(X, (*draws, n, t, p))
-        match coordinates:
+        match points:
             case Tensor():
-                coords = coordinates
-                if coords.ndim == 1:
-                    coords = coords.unsqueeze(-1)
-                coords = coords.expand_as(basis[..., :1])
+                pts = points
+                if pts.ndim == 1:
+                    pts = pts.unsqueeze(-1)
+                pts = pts.expand_as(basis[..., :1])
             case dist.Distribution():
-                increments = resolve(coordinates, (*draws, n, t))
-                coords = increments.cumsum(dim=-1).unsqueeze(-1)
-        return CovariateData(X=basis, coordinates=coords)
+                increments = resolve(points, (*draws, n, t))
+                pts = increments.cumsum(dim=-1).unsqueeze(-1)
+        return CovariateData(X=basis, points=pts)
 
     return Simulation(
-        Pipeline(
-            run=run,
-            recipe=(label(simulate, n=n, t=t, p=p, X=X, coordinates=coordinates),),
-        )
+        Pipeline(run=run, recipe=(label(simulate, n=n, t=t, p=p, X=X, points=points),))
     )
 
 

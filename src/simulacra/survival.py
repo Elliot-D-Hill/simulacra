@@ -32,11 +32,11 @@ def censor(
     event_time = getattr(data, "event_time", data.y)
     prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
     absolute = resolve(dropout, (*event_time.shape[:-2], 1, 1))
-    rolling = data.coordinates[..., :1] + horizon  # [*batch, N, T, 1]
+    rolling = data.points[..., :1] + horizon  # [*batch, N, T, 1]
     censor_time = torch.minimum(torch.minimum(prior_censor, absolute), rolling)
     observed_time = torch.minimum(event_time, censor_time)
     indicator = (event_time < censor_time).to(event_time.dtype)
-    time_to_event = observed_time - data.coordinates[..., :1]
+    time_to_event = observed_time - data.points[..., :1]
     return promote(
         SurvivalData,
         data,

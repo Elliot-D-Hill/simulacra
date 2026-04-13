@@ -23,7 +23,7 @@ def fixed_effects(data: CovariateData, k: int, beta: Prior) -> PredictorData:
     coefficient = resolve(beta, (*batch, 1, p, k))
     eta = data.X @ coefficient
     return PredictorData(
-        X=data.X, coordinates=data.coordinates, eta=eta, beta=coefficient.squeeze(-3)
+        X=data.X, points=data.points, eta=eta, beta=coefficient.squeeze(-3)
     )
 
 
