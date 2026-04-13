@@ -27,7 +27,7 @@ from .states import (
     SurvivalData,
 )
 from .states import promote
-from .transforms import Pipeline, Run, Step, chain, resolve, suffixed
+from .transforms import Pipeline, Run, Step, chain, label, resolve, suffixed
 
 __all__ = [
     "CompetingResponse",
@@ -60,6 +60,7 @@ __all__ = [
     "UNIT_VARIANCE",
     "build_graph",
     "chain",
+    "label",
     "promote",
     "resolve",
     "step",

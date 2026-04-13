@@ -36,7 +36,7 @@ def _format(v: object) -> str:
     return repr(v)
 
 
-def _label(fn: Callable[..., object], **kwargs: object) -> str:
+def label(fn: Callable[..., object], **kwargs: object) -> str:
     parts = ", ".join(f"{k}={_format(v)}" for k, v in kwargs.items())
     return f"{fn.__name__}({parts})"
 
@@ -53,7 +53,7 @@ class Pipeline[S]:
         self, fn: Callable[..., tuple[T, Params]], **kwargs: object
     ) -> "Pipeline[T]":
         step = partial(fn, **kwargs) if kwargs else fn
-        return Pipeline(chain(self.run, step), (*self.recipe, _label(fn, **kwargs)))
+        return Pipeline(chain(self.run, step), (*self.recipe, label(fn, **kwargs)))
 
     def __repr__(self) -> str:
         return "\n  .".join(self.recipe) or "Pipeline"

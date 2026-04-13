@@ -38,7 +38,7 @@ from .states import (
 from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
     Pipeline,
-    _label,
+    label,
     activation,
     chain,
     covariates,
@@ -122,21 +122,21 @@ class Simulation:
     @step
     def z_score(self) -> Covariate:
         return Covariate(
-            self._pipeline.then(chain(resolve_design, z_score), _label(z_score))
+            self._pipeline.then(chain(resolve_design, z_score), label(z_score))
         )
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
         step_fn = chain(resolve_design, partial(min_max_scale, low=low, high=high))
         return Covariate(
-            self._pipeline.then(step_fn, _label(min_max_scale, low=low, high=high))
+            self._pipeline.then(step_fn, label(min_max_scale, low=low, high=high))
         )
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> "Predictor":
         step_fn = chain(resolve_design, partial(fixed_effects, k=k, beta=beta))
         return Predictor(
-            self._pipeline.then(step_fn, _label(fixed_effects, k=k, beta=beta))
+            self._pipeline.then(step_fn, label(fixed_effects, k=k, beta=beta))
         )
 
 
@@ -184,9 +184,7 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> "Survival":
-        return Survival(
-            self._pipeline.apply(censor, dropout=dropout, horizon=horizon)
-        )
+        return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
 
 
 class CompetingResponse(_ResponsePipeline[EventTimeData]):
@@ -194,17 +192,13 @@ class CompetingResponse(_ResponsePipeline[EventTimeData]):
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> "Survival":
-        return Survival(
-            self._pipeline.apply(censor, dropout=dropout, horizon=horizon)
-        )
+        return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
 
 
 class Survival(_ResponsePipeline[SurvivalData]):
     @step
     def discretize(self, boundaries: Tensor) -> "DiscreteSurvival":
-        return DiscreteSurvival(
-            self._pipeline.apply(discretize, boundaries=boundaries)
-        )
+        return DiscreteSurvival(self._pipeline.apply(discretize, boundaries=boundaries))
 
 
 class DiscreteSurvival(_ResponsePipeline[DiscreteSurvivalData]): ...
@@ -237,40 +231,40 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
         return self._apply(
             partial(gaussian, covariance=covariance),
-            _label(gaussian, covariance=covariance),
+            label(gaussian, covariance=covariance),
         )
 
     @step
     def poisson(self) -> Response:
-        return self._apply(poisson, _label(poisson))
+        return self._apply(poisson, label(poisson))
 
     @step
     def bernoulli(self) -> Response:
-        return self._apply(bernoulli, _label(bernoulli))
+        return self._apply(bernoulli, label(bernoulli))
 
     @step
     def binomial(self, num_trials: int = 1) -> Response:
         return self._apply(
             partial(binomial, num_trials=num_trials),
-            _label(binomial, num_trials=num_trials),
+            label(binomial, num_trials=num_trials),
         )
 
     @step
     def negative_binomial(self, concentration: float | Tensor) -> Response:
         return self._apply(
             partial(negative_binomial, concentration=concentration),
-            _label(negative_binomial, concentration=concentration),
+            label(negative_binomial, concentration=concentration),
         )
 
     @step
     def categorical(self) -> Response:
-        return self._apply(categorical, _label(categorical))
+        return self._apply(categorical, label(categorical))
 
     @step
     def gamma(self, concentration: float | Tensor) -> PositiveSupportResponse:
         return self._apply(
             partial(gamma, concentration=concentration),
-            _label(gamma, concentration=concentration),
+            label(gamma, concentration=concentration),
             PositiveSupportResponse,
         )
 
@@ -278,7 +272,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     def log_normal(self, std: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
             partial(log_normal, std=std),
-            _label(log_normal, std=std),
+            label(log_normal, std=std),
             PositiveSupportResponse,
         )
 
@@ -286,7 +280,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     def weibull(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
             partial(weibull, shape=shape),
-            _label(weibull, shape=shape),
+            label(weibull, shape=shape),
             PositiveSupportResponse,
         )
 
@@ -294,7 +288,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     def exponential(self) -> PositiveSupportResponse:
         return self._apply(
             partial(weibull, shape=1.0),
-            _label(weibull, shape=1.0),
+            label(weibull, shape=1.0),
             PositiveSupportResponse,
         )
 
@@ -302,7 +296,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     def log_logistic(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
             partial(log_logistic, shape=shape),
-            _label(log_logistic, shape=shape),
+            label(log_logistic, shape=shape),
             PositiveSupportResponse,
         )
 
@@ -310,7 +304,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     def gompertz(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
             partial(gompertz, shape=shape),
-            _label(gompertz, shape=shape),
+            label(gompertz, shape=shape),
             PositiveSupportResponse,
         )
 
@@ -340,23 +334,20 @@ class Predictor(_FamilyPipeline):
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
         step_fn = suffixed(
-            partial(random_effects, levels=levels, q=q, W=w, B=B, b=b),
-            self._re_count,
+            partial(random_effects, levels=levels, q=q, W=w, B=B, b=b), self._re_count
         )
         return Predictor(
             self._pipeline.then(
-                step_fn, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)
+                step_fn, label(random_effects, levels=levels, q=q, W=w, B=B, b=b)
             ),
             re_count=self._re_count + 1,
             proj_count=self._proj_count,
         )
 
     @step
-    def activation(
-        self, fn: Callable[[Tensor], Tensor] = torch.relu
-    ) -> "Predictor":
+    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> "Predictor":
         return Predictor(
-            self._pipeline.then(partial(activation, fn=fn), _label(activation)),
+            self._pipeline.then(partial(activation, fn=fn), label(activation)),
             re_count=self._re_count,
             proj_count=self._proj_count,
         )
@@ -368,7 +359,7 @@ class Predictor(_FamilyPipeline):
         )
         return Predictor(
             self._pipeline.then(
-                step_fn, _label(projection, output=output, weight=weight)
+                step_fn, label(projection, output=output, weight=weight)
             ),
             re_count=self._re_count,
             proj_count=self._proj_count + 1,
@@ -382,20 +373,17 @@ class Predictor(_FamilyPipeline):
         temperature: float | Tensor = 1.0,
     ) -> "Predictor":
         step_fn = partial(
-            tokenize,
-            vocab_size=vocab_size,
-            weight=weight,
-            temperature=temperature,
+            tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature
         )
         return Predictor(
-            self._pipeline.then(step_fn, _label(tokenize, vocab_size=vocab_size)),
+            self._pipeline.then(step_fn, label(tokenize, vocab_size=vocab_size)),
             re_count=self._re_count,
             proj_count=self._proj_count,
         )
 
     @step
     def constant_target(self) -> "ConstantPredictor":
-        recipe = (*self._pipeline.recipe, _label(constant_target))
+        recipe = (*self._pipeline.recipe, label(constant_target))
         return ConstantPredictor(Pipeline(self._pipeline.run, recipe))
 
 
