@@ -12,7 +12,13 @@ requires = ["uv_build>=0.10.9,<0.11.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
-dev = ["marimo>=0.23.1", "pytest>=9.0.3", "ruff>=0.15.9"]
+dev = [
+    "marimo>=0.23.1",
+    "pre-commit>=4.5.1",
+    "pyright>=1.1.408",
+    "pytest>=9.0.3",
+    "ruff>=0.15.9",
+]
 
 [tool.ruff.format]
 skip-magic-trailing-comma = true

@@ -88,9 +88,7 @@ class Covariate:
 
     @step
     def z_score(self) -> Self:
-        return type(self)(
-            compose(self._run, z_score), (*self._recipe, _label(z_score))
-        )
+        return type(self)(compose(self._run, z_score), (*self._recipe, _label(z_score)))
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Self:
@@ -153,14 +151,19 @@ class Simulation:
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
         return Covariate(
-            compose(self._run, chain(resolve_design, partial(min_max_scale, low=low, high=high))),
+            compose(
+                self._run,
+                chain(resolve_design, partial(min_max_scale, low=low, high=high)),
+            ),
             (*self._recipe, _label(min_max_scale, low=low, high=high)),
         )
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
-            compose(self._run, chain(resolve_design, partial(fixed_effects, k=k, beta=beta))),
+            compose(
+                self._run, chain(resolve_design, partial(fixed_effects, k=k, beta=beta))
+            ),
             (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
         )
 
@@ -382,7 +385,9 @@ class Predictor(_FamilyPipeline):
         result = self._chain(
             compose(
                 self._run,
-                suffixed(partial(random_effects, levels=levels, q=q, W=w, B=B, b=b), index),
+                suffixed(
+                    partial(random_effects, levels=levels, q=q, W=w, B=B, b=b), index
+                ),
             ),
             (*self._recipe, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)),
         )
@@ -417,7 +422,15 @@ class Predictor(_FamilyPipeline):
         temperature: float | Tensor = 1.0,
     ) -> Predictor:
         return self._chain(
-            compose(self._run, partial(tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature)),
+            compose(
+                self._run,
+                partial(
+                    tokenize,
+                    vocab_size=vocab_size,
+                    weight=weight,
+                    temperature=temperature,
+                ),
+            ),
             (*self._recipe, _label(tokenize, vocab_size=vocab_size)),
         )
 
@@ -428,9 +441,7 @@ class Predictor(_FamilyPipeline):
 
 class ConstantPredictor(_FamilyPipeline):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
-        super().__init__(
-            run, recipe, wrap=lambda f: partial(constant_target, family=f)
-        )
+        super().__init__(run, recipe, wrap=lambda f: partial(constant_target, family=f))
 
 
 GRAPH: Final[Graph] = build_graph(
