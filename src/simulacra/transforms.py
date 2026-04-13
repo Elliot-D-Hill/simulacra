@@ -3,6 +3,7 @@ from dataclasses import replace
 
 import torch
 import torch.distributions as dist
+import torch.nn.functional as F
 from torch import Tensor
 
 from .states import CovariateData, PredictorData, Prior, RandomEffect, ResponseData
@@ -28,12 +29,15 @@ def fixed_effects(data: CovariateData, k: int, beta: Prior) -> PredictorData:
 
 
 def random_effects(
-    data: PredictorData, levels: int, q: int, W: Prior, B: Prior, b: Prior
+    data: PredictorData, levels: int, q: int, W: Prior | None, B: Prior, b: Prior
 ) -> PredictorData:
     *batch, n, t, k = data.eta.shape
-    # design choice: T=1 implies membership is constant over time. For
-    # non-constant longitudinal membership, a user must pass a custom W
-    membership = resolve(W, (*batch, n, 1, levels))
+    if W is None:
+        indices = torch.arange(n) % levels
+        membership = F.one_hot(indices, levels).float().unsqueeze(-2)
+        membership = membership.expand(*batch, n, 1, levels)
+    else:
+        membership = resolve(W, (*batch, n, 1, levels))
     basis = resolve(B, (*batch, n, t, q))
     coefficient = resolve(b, (*batch, levels, q, k))
     eta = torch.einsum("...ntl,...ntr,...lrk->...ntk", membership, basis, coefficient)

@@ -215,19 +215,22 @@ def test_default_membership_shapes(dims: tuple[int, int, int, int]) -> None:
     assert data.eta.shape == (N, T, k)
 
 
-def test_default_membership_dirichlet(dims: tuple[int, int, int, int]) -> None:
-    """Default W is Dirichlet: rows sum to 1 with all-positive entries."""
+def test_default_membership_round_robin(dims: tuple[int, int, int, int]) -> None:
+    """Default W is one-hot round-robin: each row selects exactly one level."""
     N, T, p, k = dims
+    levels = 3
     data = (
         simulate(N, T, p)
         .fixed_effects(k=k)
-        .random_effects(levels=3, q=2)
+        .random_effects(levels=levels, q=2)
         .gaussian()
         .draw(seed=0)
     )
     W = data.random_effect[0].W
     assert torch.allclose(W.sum(-1), torch.ones(N, 1))
-    assert (W > 0).all()
+    assert ((W == 0) | (W == 1)).all()
+    expected = torch.arange(N) % levels
+    assert torch.equal(W.squeeze(-2).argmax(-1), expected)
 
 
 def test_default_membership_constant_across_time(

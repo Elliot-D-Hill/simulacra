@@ -160,16 +160,7 @@ class Predictor(_Pipeline[PredictorData]):
         B: Prior = UNIT_NORMAL,
         b: Prior = UNIT_NORMAL,
     ) -> Predictor:
-        # design choice: default to soft level assignments
-        return self._step(
-            Predictor,
-            random_effects,
-            levels=levels,
-            q=q,
-            W=W or dist.Dirichlet(torch.ones(levels)),
-            B=B,
-            b=b,
-        )
+        return self._step(Predictor, random_effects, levels=levels, q=q, W=W, B=B, b=b)
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
