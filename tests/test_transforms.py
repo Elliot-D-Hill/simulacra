@@ -154,18 +154,14 @@ def test_covariates_and_points_order_independent(
 def test_missing_x(dims: tuple[int, int, int, int]) -> None:
     """missing_x injects NaNs into X."""
     N, T, p, k = dims
-    data = (
-        Simulation(N, T, p).fixed_effects(k=k).gaussian().missing_x(0.3).draw(seed=1)
-    )
+    data = Simulation(N, T, p).fixed_effects(k=k).gaussian().missing_x(0.3).draw(seed=1)
     assert data.X.isnan().any()
 
 
 def test_missing_y(dims: tuple[int, int, int, int]) -> None:
     """missing_y injects NaNs into y."""
     N, T, p, k = dims
-    data = (
-        Simulation(N, T, p).fixed_effects(k=k).poisson().missing_y(0.3).draw(seed=1)
-    )
+    data = Simulation(N, T, p).fixed_effects(k=k).poisson().missing_y(0.3).draw(seed=1)
     assert data.y.shape == (N, T, k)
     assert data.y.isnan().any()
 
@@ -184,9 +180,7 @@ def test_event_time(dims: tuple[int, int, int, int]) -> None:
 def test_log_logistic_event_time(dims: tuple[int, int, int, int]) -> None:
     """Log-logistic produces positive event times with correct shape."""
     N, T, p, k = dims
-    data = (
-        Simulation(N, T, p).fixed_effects(k=k).log_logistic(shape=2.0).draw(seed=1)
-    )
+    data = Simulation(N, T, p).fixed_effects(k=k).log_logistic(shape=2.0).draw(seed=1)
     assert data.y.shape == (N, T, k)
     assert (data.y > 0).all()
 
@@ -199,12 +193,12 @@ def test_gompertz_event_time(dims: tuple[int, int, int, int]) -> None:
     assert (data.y > 0).all()
 
 
-def test_exponential_equals_weibull_shape_one(dims: tuple[int, int, int, int]) -> None:
-    """Exponential is Weibull with shape=1."""
+def test_exponential_positive_support(dims: tuple[int, int, int, int]) -> None:
+    """Exponential samples are strictly positive."""
     N, T, p, k = dims
-    d1 = Simulation(N, T, p).fixed_effects(k=k).exponential().draw(seed=42)
-    d2 = Simulation(N, T, p).fixed_effects(k=k).weibull(shape=1.0).draw(seed=42)
-    assert d1.y.equal(d2.y)
+    d = Simulation(N, T, p).fixed_effects(k=k).exponential().draw(seed=42)
+    assert d.y.shape == (N, T, k)
+    assert (d.y > 0).all()
 
 
 def test_gamma_survival_pipeline(dims: tuple[int, int, int, int]) -> None:
@@ -360,8 +354,10 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
     eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W_test, B_test, b_test)
     coordinates = torch.arange(T, dtype=torch.float).unsqueeze(-1).expand(N, T, 1)
     base_data = PredictorData(
-        X=torch.empty(0), coordinates=coordinates,
-        eta=torch.zeros(N, T, k), beta=torch.empty(0),
+        X=torch.empty(0),
+        coordinates=coordinates,
+        eta=torch.zeros(N, T, k),
+        beta=torch.empty(0),
     )
     re_data = random_effects(base_data, L, q, W_test, B_test, b_test)
     assert eta_manual.equal(re_data.eta)
@@ -373,9 +369,7 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
 def test_activation_relu_clips_negatives(dims: tuple[int, int, int, int]) -> None:
     """ReLU activation zeroes negative values in eta."""
     N, T, p, k = dims
-    data = (
-        Simulation(N, T, p).fixed_effects(k=k).activation().gaussian().draw(seed=0)
-    )
+    data = Simulation(N, T, p).fixed_effects(k=k).activation().gaussian().draw(seed=0)
     assert (data.eta >= 0).all()
 
 

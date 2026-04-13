@@ -41,9 +41,7 @@ def negative_binomial(
     return promote(ResponseData, data, y=y)
 
 
-def gamma(
-    data: PredictorData, concentration: float | Tensor
-) -> ResponseData:
+def gamma(data: PredictorData, concentration: float | Tensor) -> ResponseData:
     y = resolve(dist.Gamma(concentration, data.eta.exp().reciprocal()))
     return promote(ResponseData, data, y=y)
 
@@ -58,15 +56,19 @@ def categorical(data: PredictorData) -> ResponseData:
     return promote(ResponseData, data, y=y)
 
 
+def exponential(data: PredictorData) -> ResponseData:
+    rate = data.eta.exp()
+    y = resolve(dist.Exponential(rate))
+    return promote(ResponseData, data, y=y)
+
+
 def weibull(data: PredictorData, shape: float | Tensor) -> ResponseData:
     scale = data.eta.exp().reciprocal()
     y = resolve(dist.Weibull(scale, shape))
     return promote(ResponseData, data, y=y)
 
 
-def log_logistic(
-    data: PredictorData, shape: float | Tensor
-) -> ResponseData:
+def log_logistic(data: PredictorData, shape: float | Tensor) -> ResponseData:
     scale = data.eta.exp().reciprocal()
     u = torch.rand_like(data.eta)
     y = scale * (u / (1.0 - u)).pow(1.0 / shape)

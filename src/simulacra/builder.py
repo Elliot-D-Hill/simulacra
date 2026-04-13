@@ -13,6 +13,7 @@ from .family import (
     binomial,
     categorical,
     constant_target,
+    exponential,
     gamma,
     gaussian,
     gompertz,
@@ -206,99 +207,75 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
         self._wrap = wrap
 
     @overload
-    def _apply(self, family: Family, label: str) -> Response: ...
-    @overload
-    def _apply(
-        self, family: Family, label: str, cls: type[PositiveSupportResponse]
-    ) -> PositiveSupportResponse: ...
-    def _apply(
+    def _family(
         self,
-        family: Family,
-        label: str,
+        fn: Callable[..., ResponseData],
+        cls: type[Response] = ...,
+        **kwargs: object,
+    ) -> Response: ...
+    @overload
+    def _family(
+        self,
+        fn: Callable[..., ResponseData],
+        cls: type[PositiveSupportResponse],
+        **kwargs: object,
+    ) -> PositiveSupportResponse: ...
+    def _family(
+        self,
+        fn: Callable[..., ResponseData],
         cls: type[_ResponsePipeline[ResponseData]] = Response,
+        **kwargs: object,
     ) -> _ResponsePipeline[ResponseData]:
-        return cls(self._pipeline.then(self._wrap(family), label))
+        family = partial(fn, **kwargs)
+        return cls(self._pipeline.then(self._wrap(family), label(fn, **kwargs)))
 
     @step
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
-        return self._apply(
-            partial(gaussian, covariance=covariance),
-            label(gaussian, covariance=covariance),
-        )
+        return self._family(gaussian, covariance=covariance)
 
     @step
     def poisson(self) -> Response:
-        return self._apply(poisson, label(poisson))
+        return self._family(poisson)
 
     @step
     def bernoulli(self) -> Response:
-        return self._apply(bernoulli, label(bernoulli))
+        return self._family(bernoulli)
 
     @step
     def binomial(self, num_trials: int = 1) -> Response:
-        return self._apply(
-            partial(binomial, num_trials=num_trials),
-            label(binomial, num_trials=num_trials),
-        )
+        return self._family(binomial, num_trials=num_trials)
 
     @step
     def negative_binomial(self, concentration: float | Tensor) -> Response:
-        return self._apply(
-            partial(negative_binomial, concentration=concentration),
-            label(negative_binomial, concentration=concentration),
-        )
+        return self._family(negative_binomial, concentration=concentration)
 
     @step
     def categorical(self) -> Response:
-        return self._apply(categorical, label(categorical))
+        return self._family(categorical)
 
     @step
     def gamma(self, concentration: float | Tensor) -> PositiveSupportResponse:
-        return self._apply(
-            partial(gamma, concentration=concentration),
-            label(gamma, concentration=concentration),
-            PositiveSupportResponse,
-        )
+        return self._family(gamma, PositiveSupportResponse, concentration=concentration)
 
     @step
     def log_normal(self, std: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._apply(
-            partial(log_normal, std=std),
-            label(log_normal, std=std),
-            PositiveSupportResponse,
-        )
+        return self._family(log_normal, PositiveSupportResponse, std=std)
 
     @step
     def weibull(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._apply(
-            partial(weibull, shape=shape),
-            label(weibull, shape=shape),
-            PositiveSupportResponse,
-        )
+        return self._family(weibull, PositiveSupportResponse, shape=shape)
 
     @step
     def exponential(self) -> PositiveSupportResponse:
-        return self._apply(
-            partial(weibull, shape=1.0),
-            label(weibull, shape=1.0),
-            PositiveSupportResponse,
-        )
+        return self._family(exponential, PositiveSupportResponse)
 
     @step
     def log_logistic(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._apply(
-            partial(log_logistic, shape=shape),
-            label(log_logistic, shape=shape),
-            PositiveSupportResponse,
-        )
+        return self._family(log_logistic, PositiveSupportResponse, shape=shape)
 
     @step
     def gompertz(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
-        return self._apply(
-            partial(gompertz, shape=shape),
-            label(gompertz, shape=shape),
-            PositiveSupportResponse,
-        )
+        return self._family(gompertz, PositiveSupportResponse, shape=shape)
 
 
 class Predictor(_FamilyPipeline):
@@ -314,9 +291,9 @@ class Predictor(_FamilyPipeline):
     ) -> Predictor:
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
-        return Predictor(self._pipeline.apply(
-            random_effects, levels=levels, q=q, W=w, B=B, b=b,
-        ))
+        return Predictor(
+            self._pipeline.apply(random_effects, levels=levels, q=q, W=w, B=B, b=b)
+        )
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
@@ -326,9 +303,7 @@ class Predictor(_FamilyPipeline):
 
     @step
     def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
-        return Predictor(self._pipeline.apply(
-            projection, output=output, weight=weight,
-        ))
+        return Predictor(self._pipeline.apply(projection, output=output, weight=weight))
 
     @step
     def tokenize(
@@ -337,9 +312,11 @@ class Predictor(_FamilyPipeline):
         weight: Prior = UNIT_NORMAL,
         temperature: float | Tensor = 1.0,
     ) -> Predictor:
-        return Predictor(self._pipeline.apply(
-            tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature,
-        ))
+        return Predictor(
+            self._pipeline.apply(
+                tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature
+            )
+        )
 
     @step
     def constant_target(self) -> ConstantPredictor:
