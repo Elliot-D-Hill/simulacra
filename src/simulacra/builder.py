@@ -54,6 +54,7 @@ from .transforms import (
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
 
+type Step[S, T] = Callable[[S], tuple[T, Params]]
 type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
 
 
@@ -69,7 +70,7 @@ def _label(fn: Callable[..., object], **kwargs: object) -> str:
     return f"{fn.__name__}({parts})"
 
 
-def _compose[S, T](prev: Run[S], step: Callable[[S], tuple[T, Params]]) -> Run[T]:
+def _compose[S, T](prev: Run[S], step: Step[S, T]) -> Run[T]:
     def run(draws: tuple[int, ...]) -> tuple[T, Params]:
         data, params = prev(draws)
         new_data, new_params = step(data)
@@ -78,9 +79,7 @@ def _compose[S, T](prev: Run[S], step: Callable[[S], tuple[T, Params]]) -> Run[T
     return run
 
 
-def _suffixed[S, T](
-    fn: Callable[[S], tuple[T, Params]], index: int
-) -> Callable[[S], tuple[T, Params]]:
+def _suffixed[S, T](fn: Step[S, T], index: int) -> Step[S, T]:
     def wrapped(data: S) -> tuple[T, Params]:
         new_data, params = fn(data)
         return new_data, {f"{k}_{index}": v for k, v in params.items()}
