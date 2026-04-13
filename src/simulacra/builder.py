@@ -155,24 +155,21 @@ class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
 class Response(_ResponsePipeline[ResponseData]): ...
 
 
-class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
+class _CensorPipeline[S: ResponseData](_ResponsePipeline[S]):
+    @step
+    def censor(
+        self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
+    ) -> Survival:
+        return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
+
+
+class PositiveSupportResponse(_CensorPipeline[ResponseData]):
     @step
     def competing_risks(self) -> CompetingResponse:
         return CompetingResponse(self._pipeline.apply(competing_risks))
 
-    @step
-    def censor(
-        self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> Survival:
-        return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
 
-
-class CompetingResponse(_ResponsePipeline[EventTimeData]):
-    @step
-    def censor(
-        self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> Survival:
-        return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
+class CompetingResponse(_CensorPipeline[EventTimeData]): ...
 
 
 class Survival(_ResponsePipeline[SurvivalData]):
