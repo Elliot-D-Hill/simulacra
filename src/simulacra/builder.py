@@ -20,6 +20,7 @@ from .family import (
     weibull,
 )
 from .graph import Graph, build_graph, guide, step
+from .pipeline import Pipeline, label
 from .states import (
     CovariateData,
     DiscreteSurvivalData,
@@ -30,7 +31,6 @@ from .states import (
     SurvivalData,
 )
 from .survival import EXP1, censor, competing_risks, discretize
-from .pipeline import Pipeline, label
 from .transforms import (
     activation,
     constant_y,
