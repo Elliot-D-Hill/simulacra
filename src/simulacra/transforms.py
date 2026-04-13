@@ -9,6 +9,33 @@ from .states import CovariateData, InitialData, PredictorData, Prior, ResponseDa
 
 type Params = dict[str, Tensor]
 type Step[S, T] = Callable[[S], tuple[T, Params]]
+type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
+
+
+def chain[S, M, T](first: Step[S, M], second: Step[M, T]) -> Step[S, T]:
+    def chained(data: S) -> tuple[T, Params]:
+        mid, params1 = first(data)
+        out, params2 = second(mid)
+        return out, {**params1, **params2}
+
+    return chained
+
+
+def compose[S, T](prev: Run[S], step: Step[S, T]) -> Run[T]:
+    def run(draws: tuple[int, ...]) -> tuple[T, Params]:
+        data, params = prev(draws)
+        new_data, new_params = step(data)
+        return new_data, {**params, **new_params}
+
+    return run
+
+
+def suffixed[S, T](fn: Step[S, T], index: int) -> Step[S, T]:
+    def wrapped(data: S) -> tuple[T, Params]:
+        new_data, params = fn(data)
+        return new_data, {f"{k}_{index}": v for k, v in params.items()}
+
+    return wrapped
 
 
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:

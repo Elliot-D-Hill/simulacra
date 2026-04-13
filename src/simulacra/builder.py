@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from typing import Final, NoReturn, Self, overload
 
 import torch
@@ -36,9 +37,10 @@ from .states import (
 )
 from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
-    Params,
-    Step,
+    Run,
     activation,
+    chain,
+    compose,
     covariates,
     fixed_effects,
     min_max_scale,
@@ -48,14 +50,13 @@ from .transforms import (
     projection,
     random_effects,
     resolve_design,
+    suffixed,
     tokenize,
     z_score,
 )
 
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
-
-type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
 
 
 def _label(fn: Callable[..., object], **kwargs: object) -> str:
@@ -68,23 +69,6 @@ def _label(fn: Callable[..., object], **kwargs: object) -> str:
 
     parts = ", ".join(f"{k}={_format(v)}" for k, v in kwargs.items())
     return f"{fn.__name__}({parts})"
-
-
-def _compose[S, T](prev: Run[S], step: Step[S, T]) -> Run[T]:
-    def run(draws: tuple[int, ...]) -> tuple[T, Params]:
-        data, params = prev(draws)
-        new_data, new_params = step(data)
-        return new_data, {**params, **new_params}
-
-    return run
-
-
-def _suffixed[S, T](fn: Step[S, T], index: int) -> Step[S, T]:
-    def wrapped(data: S) -> tuple[T, Params]:
-        new_data, params = fn(data)
-        return new_data, {f"{k}_{index}": v for k, v in params.items()}
-
-    return wrapped
 
 
 def _identity[T](x: T) -> T:
@@ -105,20 +89,20 @@ class Covariate:
     @step
     def z_score(self) -> Self:
         return type(self)(
-            _compose(self._run, z_score), (*self._recipe, _label(z_score))
+            compose(self._run, z_score), (*self._recipe, _label(z_score))
         )
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Self:
         return type(self)(
-            _compose(self._run, lambda data: min_max_scale(data, low, high)),
+            compose(self._run, partial(min_max_scale, low=low, high=high)),
             (*self._recipe, _label(min_max_scale, low=low, high=high)),
         )
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
-            _compose(self._run, lambda data: fixed_effects(data, k, beta)),
+            compose(self._run, partial(fixed_effects, k=k, beta=beta)),
             (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
         )
 
@@ -148,41 +132,35 @@ class Simulation:
     @step
     def covariates(self, X: Prior = UNIT_NORMAL) -> Self:
         return type(self)._from_run(
-            _compose(self._run, lambda data: covariates(data, X)),
+            compose(self._run, partial(covariates, X=X)),
             (*self._recipe, _label(covariates, X=X)),
         )
 
     @step
     def points(self, coordinates: Prior = EXP1) -> Self:
         return type(self)._from_run(
-            _compose(self._run, lambda data: points(data, coordinates)),
+            compose(self._run, partial(points, coordinates=coordinates)),
             (*self._recipe, _label(points, coordinates=coordinates)),
         )
 
     @step
     def z_score(self) -> Covariate:
         return Covariate(
-            _compose(_compose(self._run, resolve_design), z_score),
+            compose(self._run, chain(resolve_design, z_score)),
             (*self._recipe, _label(z_score)),
         )
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
         return Covariate(
-            _compose(
-                _compose(self._run, resolve_design),
-                lambda data: min_max_scale(data, low, high),
-            ),
+            compose(self._run, chain(resolve_design, partial(min_max_scale, low=low, high=high))),
             (*self._recipe, _label(min_max_scale, low=low, high=high)),
         )
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(
-            _compose(
-                _compose(self._run, resolve_design),
-                lambda data: fixed_effects(data, k, beta),
-            ),
+            compose(self._run, chain(resolve_design, partial(fixed_effects, k=k, beta=beta))),
             (*self._recipe, _label(fixed_effects, k=k, beta=beta)),
         )
 
@@ -214,14 +192,14 @@ class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
     @step
     def missing_x(self, proportion: float) -> Self:
         return type(self)(
-            _compose(self._run, lambda data: missing_x(data, proportion)),
+            compose(self._run, partial(missing_x, proportion=proportion)),
             (*self._recipe, _label(missing_x, proportion=proportion)),
         )
 
     @step
     def missing_y(self, proportion: float) -> Self:
         return type(self)(
-            _compose(self._run, lambda data: missing_y(data, proportion)),
+            compose(self._run, partial(missing_y, proportion=proportion)),
             (*self._recipe, _label(missing_y, proportion=proportion)),
         )
 
@@ -233,7 +211,7 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     @step
     def competing_risks(self) -> "CompetingResponse":
         return CompetingResponse(
-            _compose(self._run, competing_risks),
+            compose(self._run, competing_risks),
             (*self._recipe, _label(competing_risks)),
         )
 
@@ -242,7 +220,7 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> "Survival":
         return Survival(
-            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
+            compose(self._run, partial(censor, dropout=dropout, horizon=horizon)),
             (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
         )
 
@@ -253,7 +231,7 @@ class CompetingResponse(_ResponsePipeline[EventTimeData]):
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
     ) -> "Survival":
         return Survival(
-            _compose(self._run, lambda data: censor(data, dropout, horizon=horizon)),
+            compose(self._run, partial(censor, dropout=dropout, horizon=horizon)),
             (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
         )
 
@@ -262,7 +240,7 @@ class Survival(_ResponsePipeline[SurvivalData]):
     @step
     def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
         return DiscreteSurvival(
-            _compose(self._run, lambda data: discretize(data, boundaries)),
+            compose(self._run, partial(discretize, boundaries=boundaries)),
             (*self._recipe, _label(discretize, boundaries=boundaries)),
         )
 
@@ -292,12 +270,12 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
         label: str,
         cls: type[_ResponsePipeline[ResponseData]] = Response,
     ) -> _ResponsePipeline[ResponseData]:
-        return cls(_compose(self._run, self._wrap(family)), (*self._recipe, label))
+        return cls(compose(self._run, self._wrap(family)), (*self._recipe, label))
 
     @step
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
         return self._apply(
-            lambda data: gaussian(data, covariance),
+            partial(gaussian, covariance=covariance),
             _label(gaussian, covariance=covariance),
         )
 
@@ -312,14 +290,14 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def binomial(self, num_trials: int = 1) -> Response:
         return self._apply(
-            lambda data: binomial(data, num_trials),
+            partial(binomial, num_trials=num_trials),
             _label(binomial, num_trials=num_trials),
         )
 
     @step
     def negative_binomial(self, concentration: float | Tensor) -> Response:
         return self._apply(
-            lambda data: negative_binomial(data, concentration),
+            partial(negative_binomial, concentration=concentration),
             _label(negative_binomial, concentration=concentration),
         )
 
@@ -330,7 +308,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def gamma(self, concentration: float | Tensor) -> PositiveSupportResponse:
         return self._apply(
-            lambda data: gamma(data, concentration),
+            partial(gamma, concentration=concentration),
             _label(gamma, concentration=concentration),
             PositiveSupportResponse,
         )
@@ -338,7 +316,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def log_normal(self, std: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
-            lambda data: log_normal(data, std),
+            partial(log_normal, std=std),
             _label(log_normal, std=std),
             PositiveSupportResponse,
         )
@@ -346,7 +324,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def weibull(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
-            lambda data: weibull(data, shape),
+            partial(weibull, shape=shape),
             _label(weibull, shape=shape),
             PositiveSupportResponse,
         )
@@ -354,7 +332,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def exponential(self) -> PositiveSupportResponse:
         return self._apply(
-            lambda data: weibull(data, 1.0),
+            partial(weibull, shape=1.0),
             _label(weibull, shape=1.0),
             PositiveSupportResponse,
         )
@@ -362,7 +340,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def log_logistic(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
-            lambda data: log_logistic(data, shape),
+            partial(log_logistic, shape=shape),
             _label(log_logistic, shape=shape),
             PositiveSupportResponse,
         )
@@ -370,7 +348,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def gompertz(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._apply(
-            lambda data: gompertz(data, shape),
+            partial(gompertz, shape=shape),
             _label(gompertz, shape=shape),
             PositiveSupportResponse,
         )
@@ -402,9 +380,9 @@ class Predictor(_FamilyPipeline):
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
         result = self._chain(
-            _compose(
+            compose(
                 self._run,
-                _suffixed(lambda data: random_effects(data, levels, q, w, B, b), index),
+                suffixed(partial(random_effects, levels=levels, q=q, W=w, B=B, b=b), index),
             ),
             (*self._recipe, _label(random_effects, levels=levels, q=q, W=w, B=B, b=b)),
         )
@@ -414,7 +392,7 @@ class Predictor(_FamilyPipeline):
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
         return self._chain(
-            _compose(self._run, lambda data: activation(data, fn)),
+            compose(self._run, partial(activation, fn=fn)),
             (*self._recipe, _label(activation)),
         )
 
@@ -422,9 +400,9 @@ class Predictor(_FamilyPipeline):
     def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
         index = self._proj_count
         result = self._chain(
-            _compose(
+            compose(
                 self._run,
-                _suffixed(lambda data: projection(data, output, weight), index),
+                suffixed(partial(projection, output=output, weight=weight), index),
             ),
             (*self._recipe, _label(projection, output=output, weight=weight)),
         )
@@ -439,10 +417,7 @@ class Predictor(_FamilyPipeline):
         temperature: float | Tensor = 1.0,
     ) -> Predictor:
         return self._chain(
-            _compose(
-                self._run,
-                lambda data: tokenize(data, vocab_size, weight, temperature),
-            ),
+            compose(self._run, partial(tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature)),
             (*self._recipe, _label(tokenize, vocab_size=vocab_size)),
         )
 
@@ -454,7 +429,7 @@ class Predictor(_FamilyPipeline):
 class ConstantPredictor(_FamilyPipeline):
     def __init__(self, run: Run[PredictorData], recipe: tuple[str, ...] = ()) -> None:
         super().__init__(
-            run, recipe, wrap=lambda f: lambda data: constant_target(data, f)
+            run, recipe, wrap=lambda f: partial(constant_target, family=f)
         )
 
 
