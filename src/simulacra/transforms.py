@@ -46,8 +46,9 @@ class Pipeline[S]:
         return Pipeline(chain(self.run, step), (*self.recipe, label))
 
     def apply[T](self, fn: Callable[..., T], **kwargs: object) -> Pipeline[T]:
-        step = partial(fn, **kwargs) if kwargs else fn
-        return Pipeline(chain(self.run, step), (*self.recipe, label(fn, **kwargs)))
+        return Pipeline(
+            chain(self.run, partial(fn, **kwargs)), (*self.recipe, label(fn, **kwargs))
+        )
 
     def __repr__(self) -> str:
         return "\n  .".join(self.recipe) or "Pipeline"

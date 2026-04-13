@@ -117,25 +117,21 @@ class Simulation:
             self._pipeline.apply(points, coordinates=coordinates)
         )
 
+    def _covariate[T](self, fn: Callable[..., T], **kwargs: object) -> Pipeline[T]:
+        step_fn = chain(resolve_design, partial(fn, **kwargs))
+        return self._pipeline.then(step_fn, label(fn, **kwargs))
+
     @step
     def z_score(self) -> Covariate:
-        return Covariate(
-            self._pipeline.then(chain(resolve_design, z_score), label(z_score))
-        )
+        return Covariate(self._covariate(z_score))
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
-        step_fn = chain(resolve_design, partial(min_max_scale, low=low, high=high))
-        return Covariate(
-            self._pipeline.then(step_fn, label(min_max_scale, low=low, high=high))
-        )
+        return Covariate(self._covariate(min_max_scale, low=low, high=high))
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
-        step_fn = chain(resolve_design, partial(fixed_effects, k=k, beta=beta))
-        return Predictor(
-            self._pipeline.then(step_fn, label(fixed_effects, k=k, beta=beta))
-        )
+        return Predictor(self._covariate(fixed_effects, k=k, beta=beta))
 
 
 class _Pipeline[S: PredictorData]:
