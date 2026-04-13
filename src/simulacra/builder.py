@@ -6,7 +6,7 @@ import torch
 import torch.distributions as dist
 from torch import Tensor
 
-from .families import (
+from .family import (
     Family,
     bernoulli,
     binomial,
