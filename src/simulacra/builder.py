@@ -37,6 +37,7 @@ from .states import (
 from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
     Params,
+    Step,
     activation,
     covariates,
     fixed_effects,
@@ -54,7 +55,6 @@ from .transforms import (
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
 
-type Step[S, T] = Callable[[S], tuple[T, Params]]
 type Run[S] = Callable[[tuple[int, ...]], tuple[S, Params]]
 
 

@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from dataclasses import replace
 
 import torch
@@ -6,9 +5,9 @@ import torch.distributions as dist
 from torch import Tensor
 
 from .states import PredictorData, Prior, ResponseData
-from .transforms import Params, resolve
+from .transforms import Params, Step, resolve
 
-type Family = Callable[[PredictorData], tuple[ResponseData, Params]]
+type Family = Step[PredictorData, ResponseData]
 
 
 def gaussian(data: PredictorData, covariance: Prior) -> tuple[ResponseData, Params]:
@@ -82,7 +81,7 @@ def gompertz(data: PredictorData, shape: float | Tensor) -> tuple[ResponseData, 
 
 
 def constant_target(
-    data: PredictorData, family: Callable[[PredictorData], tuple[ResponseData, Params]]
+    data: PredictorData, family: Family
 ) -> tuple[ResponseData, Params]:
     """Pool eta over T, sample once per subject, broadcast y back."""
     pooled = replace(data, eta=data.eta.mean(dim=-2, keepdim=True))

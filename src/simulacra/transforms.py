@@ -8,6 +8,7 @@ from torch import Tensor
 from .states import CovariateData, InitialData, PredictorData, Prior, ResponseData
 
 type Params = dict[str, Tensor]
+type Step[S, T] = Callable[[S], tuple[T, Params]]
 
 
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
