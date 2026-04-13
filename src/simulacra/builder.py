@@ -221,7 +221,7 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     @step
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> "Survival":
+    ) -> Survival:
         return Survival(
             compose(self._run, partial(censor, dropout=dropout, horizon=horizon)),
             (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
@@ -232,7 +232,7 @@ class CompetingResponse(_ResponsePipeline[EventTimeData]):
     @step
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> "Survival":
+    ) -> Survival:
         return Survival(
             compose(self._run, partial(censor, dropout=dropout, horizon=horizon)),
             (*self._recipe, _label(censor, dropout=dropout, horizon=horizon)),
@@ -435,7 +435,7 @@ class Predictor(_FamilyPipeline):
         )
 
     @step
-    def constant_target(self) -> "ConstantPredictor":
+    def constant_target(self) -> ConstantPredictor:
         return ConstantPredictor(self._run, (*self._recipe, _label(constant_target)))
 
 
