@@ -12,7 +12,7 @@ from .builder import (
     Simulation,
     Survival,
 )
-from .families import Family
+from .family import Family
 from .graph import Graph, Transition, build_graph, step
 from .states import (
     CovariateData,
@@ -32,7 +32,7 @@ __all__ = [
     "ConstantPredictor",
     "Covariate",
     "CovariateData",
-    DiscreteSurvival,
+    "DiscreteSurvival",
     "DiscreteSurvivalData",
     "CompetingResponse",
     "EventTimeData",
@@ -40,7 +40,7 @@ __all__ = [
     "GRAPH",
     "Graph",
     "InitialData",
-    Predictor,
+    "Predictor",
     "PredictorData",
     "Prior",
     "Response",
