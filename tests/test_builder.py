@@ -1,14 +1,14 @@
 import torch
 
-from simulacra import Simulation
+from simulacra import simulate
 
 # --- type-state enforcement ---
 
 
 def test_simulation_has_no_downstream_methods(dims: tuple[int, int, int, int]) -> None:
-    """Simulation exposes only design and model entry methods."""
+    """simulate() exposes only covariate transforms and fixed_effects."""
     N, T, p, _ = dims
-    sim = Simulation(N, T, p)
+    sim = simulate(N, T, p)
     assert not hasattr(sim, "missing_x")
     assert not hasattr(sim, "tokenize")
     assert not hasattr(sim, "missing_y")
@@ -19,7 +19,7 @@ def test_simulation_has_no_downstream_methods(dims: tuple[int, int, int, int]) -
 def test_predictor_methods(dims: tuple[int, int, int, int]) -> None:
     """Predictor has tokenize and draw, but not missing_x or missing_y."""
     N, T, p, k = dims
-    pred = Simulation(N, T, p).fixed_effects(k=k)
+    pred = simulate(N, T, p).fixed_effects(k=k)
     assert hasattr(pred, "tokenize")
     assert hasattr(pred, "draw")
     assert not hasattr(pred, "missing_x")
@@ -29,7 +29,7 @@ def test_predictor_methods(dims: tuple[int, int, int, int]) -> None:
 def test_response_methods(dims: tuple[int, int, int, int]) -> None:
     """Response has missing_x and missing_y."""
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).gaussian()
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
     assert hasattr(resp, "missing_x")
     assert hasattr(resp, "missing_y")
     assert not hasattr(resp, "tokenize")
@@ -38,7 +38,7 @@ def test_response_methods(dims: tuple[int, int, int, int]) -> None:
 def test_positive_support_response_methods(dims: tuple[int, int, int, int]) -> None:
     """PositiveSupportResponse has survival methods and missingness transforms."""
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).weibull()
+    resp = simulate(N, T, p).fixed_effects(k=k).weibull()
     assert hasattr(resp, "competing_risks")
     assert hasattr(resp, "censor")
     assert hasattr(resp, "missing_x")
@@ -50,7 +50,7 @@ def test_all_positive_support_families_have_survival_methods(
 ) -> None:
     """All positive-support families expose censor and competing_risks."""
     N, T, p, k = dims
-    base = Simulation(N, T, p).fixed_effects(k=k)
+    base = simulate(N, T, p).fixed_effects(k=k)
     families = [
         base.gamma(concentration=2.0),
         base.log_normal(),
@@ -69,7 +69,7 @@ def test_general_response_lacks_survival_methods(
 ) -> None:
     """General families do not expose survival methods."""
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).gaussian()
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
     assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "censor")
 
@@ -77,7 +77,7 @@ def test_general_response_lacks_survival_methods(
 def test_survival_methods(dims: tuple[int, int, int, int]) -> None:
     """Survival has missingness transforms and discretize."""
     N, T, p, k = dims
-    surv = Simulation(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0)
+    surv = simulate(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0)
     assert hasattr(surv, "missing_x")
     assert hasattr(surv, "missing_y")
     assert hasattr(surv, "discretize")
@@ -86,7 +86,7 @@ def test_survival_methods(dims: tuple[int, int, int, int]) -> None:
 def test_constant_predictor_methods(dims: tuple[int, int, int, int]) -> None:
     """ConstantPredictor has families and draw, but no RE or double-pooling."""
     N, T, p, k = dims
-    seq = Simulation(N, T, p).fixed_effects(k=k).constant_target()
+    seq = simulate(N, T, p).fixed_effects(k=k).constant_target()
     assert not hasattr(seq, "constant_target")
     assert not hasattr(seq, "random_effects")
     assert hasattr(seq, "gaussian")
@@ -94,24 +94,15 @@ def test_constant_predictor_methods(dims: tuple[int, int, int, int]) -> None:
     assert not hasattr(seq, "missing_x")
 
 
-def test_covariate_methods(dims: tuple[int, int, int, int]) -> None:
-    """Covariate has scaling and fixed_effects, but no families or draw."""
+def test_self_transition_preserves_methods(dims: tuple[int, int, int, int]) -> None:
+    """z_score() returns a Simulation with the same API."""
     N, T, p, _ = dims
-    cov = Simulation(N, T, p).z_score()
-    assert hasattr(cov, "z_score")
-    assert hasattr(cov, "min_max_scale")
-    assert hasattr(cov, "fixed_effects")
-    assert not hasattr(cov, "gaussian")
-    assert not hasattr(cov, "draw")
-
-
-def test_simulation_methods(dims: tuple[int, int, int, int]) -> None:
-    """Simulation exposes covariate transforms and fixed_effects."""
-    N, T, p, _ = dims
-    sim = Simulation(N, T, p)
+    sim = simulate(N, T, p).z_score()
     assert hasattr(sim, "z_score")
     assert hasattr(sim, "min_max_scale")
     assert hasattr(sim, "fixed_effects")
+    assert not hasattr(sim, "gaussian")
+    assert not hasattr(sim, "draw")
 
 
 # --- pipeline ---
@@ -120,15 +111,15 @@ def test_simulation_methods(dims: tuple[int, int, int, int]) -> None:
 def test_reproducibility(dims: tuple[int, int, int, int]) -> None:
     """Same seed produces identical draws."""
     N, T, p, k = dims
-    data1 = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
-    data2 = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
+    data1 = simulate(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
+    data2 = simulate(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
     assert data1.y.equal(data2.y)
 
 
 def test_immutability(dims: tuple[int, int, int, int]) -> None:
     """Branching from a shared base reuses X but produces different y."""
     N, T, p, k = dims
-    base = Simulation(N, T, p).fixed_effects(k=k)
+    base = simulate(N, T, p).fixed_effects(k=k)
     da = base.gaussian().draw(seed=0)
     db = base.poisson().draw(seed=0)
     assert da.X.equal(db.X)
@@ -138,7 +129,7 @@ def test_immutability(dims: tuple[int, int, int, int]) -> None:
 def test_base_shape(dims: tuple[int, int, int, int]) -> None:
     """draws=None gives [N, T, ...] shape."""
     N, T, p, k = dims
-    data = Simulation(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
+    data = simulate(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
     assert data.X.shape == (N, T, p)
     assert data.y.shape == (N, T, k)
 
@@ -148,7 +139,7 @@ def test_draws_shape(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     D = 7
     data = (
-        Simulation(N, T, p)
+        simulate(N, T, p)
         .fixed_effects(k=k)
         .weibull()
         .censor(horizon=2.0)
@@ -164,7 +155,7 @@ def test_draws_independent(dims: tuple[int, int, int, int]) -> None:
     """Draws along the leading dimension are independent."""
     N, T, p, k = dims
     data = (
-        Simulation(N, T, p)
+        simulate(N, T, p)
         .fixed_effects(k=k)
         .weibull()
         .censor(horizon=2.0)
@@ -177,11 +168,7 @@ def test_draws_none_base_shape(dims: tuple[int, int, int, int]) -> None:
     """draws=None on a full pipeline gives base shape."""
     N, T, p, k = dims
     data = (
-        Simulation(N, T, p)
-        .fixed_effects(k=k)
-        .weibull()
-        .censor(horizon=2.0)
-        .draw(seed=0)
+        simulate(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0).draw(seed=0)
     )
     assert data.y.shape == (N, T, k)
 
@@ -190,7 +177,7 @@ def test_concrete_tensor_prior(dims: tuple[int, int, int, int]) -> None:
     """A concrete tensor passed as X via covariates flows through unchanged."""
     N, T, p, k = dims
     X_fixed = torch.ones(N, T, p)
-    data = Simulation(N, T, p, X=X_fixed).fixed_effects(k=k).gaussian().draw(seed=0)
+    data = simulate(N, T, p, X=X_fixed).fixed_effects(k=k).gaussian().draw(seed=0)
     assert data.X.equal(X_fixed)
 
 
@@ -198,7 +185,7 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
     """Full pipeline produces all expected fields."""
     N, T, p, k = dims
     data = (
-        Simulation(N, T, p)
+        simulate(N, T, p)
         .fixed_effects(k=k)
         .tokenize(vocab_size=50)
         .weibull(shape=1.5)

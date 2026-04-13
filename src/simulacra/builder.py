@@ -56,7 +56,7 @@ def _identity[T](x: T) -> T:
     return x
 
 
-class Covariate:
+class Simulation:
     def __init__(self, pipeline: Pipeline[CovariateData]) -> None:
         self._pipeline = pipeline
 
@@ -79,50 +79,28 @@ class Covariate:
         return Predictor(self._pipeline.apply(fixed_effects, k=k, beta=beta))
 
 
-class Simulation:
-    def __init__(
-        self,
-        n: int,
-        t: int = 1,
-        p: int = 1,
-        X: Prior = UNIT_NORMAL,
-        coordinates: Prior = EXP1,
-    ) -> None:
-        def run(draws: tuple[int, ...]) -> CovariateData:
-            basis = resolve(X, (*draws, n, t, p))
-            match coordinates:
-                case Tensor():
-                    coords = coordinates
-                    if coords.ndim == 1:
-                        coords = coords.unsqueeze(-1)
-                    coords = coords.expand_as(basis[..., :1])
-                case dist.Distribution():
-                    increments = resolve(coordinates, (*draws, n, t))
-                    coords = increments.cumsum(dim=-1).unsqueeze(-1)
-            return CovariateData(X=basis, coordinates=coords)
+def simulate(
+    n: int, t: int = 1, p: int = 1, X: Prior = UNIT_NORMAL, coordinates: Prior = EXP1
+) -> Simulation:
+    def run(draws: tuple[int, ...]) -> CovariateData:
+        basis = resolve(X, (*draws, n, t, p))
+        match coordinates:
+            case Tensor():
+                coords = coordinates
+                if coords.ndim == 1:
+                    coords = coords.unsqueeze(-1)
+                coords = coords.expand_as(basis[..., :1])
+            case dist.Distribution():
+                increments = resolve(coordinates, (*draws, n, t))
+                coords = increments.cumsum(dim=-1).unsqueeze(-1)
+        return CovariateData(X=basis, coordinates=coords)
 
-        self._pipeline: Pipeline[CovariateData] = Pipeline(
+    return Simulation(
+        Pipeline(
             run=run,
-            recipe=(label(type(self), n=n, t=t, p=p, X=X, coordinates=coordinates),),
+            recipe=(label(simulate, n=n, t=t, p=p, X=X, coordinates=coordinates),),
         )
-
-    def __repr__(self) -> str:
-        return "\n  .".join(self._pipeline.recipe) or type(self).__name__
-
-    def __getattr__(self, name: str) -> NoReturn:
-        raise guide(self, name, GRAPH)
-
-    @step
-    def z_score(self) -> Covariate:
-        return Covariate(self._pipeline.apply(z_score))
-
-    @step
-    def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
-        return Covariate(self._pipeline.apply(min_max_scale, low=low, high=high))
-
-    @step
-    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
-        return Predictor(self._pipeline.apply(fixed_effects, k=k, beta=beta))
+    )
 
 
 class _Pipeline[S: PredictorData]:
@@ -315,7 +293,6 @@ class ConstantPredictor(_FamilyPipeline):
 
 GRAPH: Final[Graph] = build_graph(
     Simulation,
-    Covariate,
     Predictor,
     ConstantPredictor,
     Response,

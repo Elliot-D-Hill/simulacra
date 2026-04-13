@@ -4,13 +4,13 @@ from .builder import (
     UNIT_VARIANCE,
     CompetingResponse,
     ConstantPredictor,
-    Covariate,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
     Response,
     Simulation,
     Survival,
+    simulate,
 )
 from .family import Family
 from .graph import Graph, Transition, build_graph, step
@@ -30,7 +30,6 @@ from .transforms import Pipeline, Run, Step, chain, label, resolve
 __all__ = [
     "CompetingResponse",
     "ConstantPredictor",
-    "Covariate",
     "CovariateData",
     "DiscreteSurvival",
     "DiscreteSurvivalData",
@@ -59,5 +58,6 @@ __all__ = [
     "label",
     "promote",
     "resolve",
+    "simulate",
     "step",
 ]

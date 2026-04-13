@@ -4,19 +4,18 @@ from simulacra import (
     GRAPH,
     CompetingResponse,
     ConstantPredictor,
-    Covariate,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
     Response,
     Simulation,
     Survival,
+    simulate,
 )
 
 ALL_STATES: set[type] = {
     CompetingResponse,
     ConstantPredictor,
-    Covariate,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
@@ -33,11 +32,6 @@ def test_graph_contains_all_concrete_classes() -> None:
 def test_simulation_transitions() -> None:
     expected = {"z_score", "min_max_scale", "fixed_effects"}
     assert GRAPH.methods_on(Simulation) == expected
-
-
-def test_covariate_transitions() -> None:
-    expected = {"z_score", "min_max_scale", "fixed_effects"}
-    assert GRAPH.methods_on(Covariate) == expected
 
 
 def test_predictor_transitions() -> None:
@@ -108,9 +102,11 @@ def test_discrete_survival_transitions() -> None:
 
 def test_self_transitions_resolve_to_source() -> None:
     """Self targets are stored as None, not the base class."""
-    covariate_transitions = {(t.method, t.target) for t in GRAPH.from_state(Covariate)}
-    assert ("z_score", None) in covariate_transitions
-    assert ("min_max_scale", None) in covariate_transitions
+    simulation_transitions = {
+        (t.method, t.target) for t in GRAPH.from_state(Simulation)
+    }
+    assert ("z_score", None) in simulation_transitions
+    assert ("min_max_scale", None) in simulation_transitions
 
 
 def test_family_targets() -> None:
@@ -141,7 +137,7 @@ def test_private_methods_not_in_graph() -> None:
 
 def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).gaussian()
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
     with pytest.raises(
         AttributeError,
         match=r"Response has no method censor\(\).*CompetingResponse.*PositiveSupportResponse",
@@ -151,7 +147,7 @@ def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
 
 def test_survival_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
-    surv = Simulation(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0)
+    surv = simulate(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0)
     with pytest.raises(
         AttributeError, match=r"Survival has no method gaussian\(\).*Predictor"
     ):
@@ -160,21 +156,21 @@ def test_survival_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
 
 def test_simulation_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
     N, T, p, _ = dims
-    sim = Simulation(N, T, p)
+    sim = simulate(N, T, p)
     with pytest.raises(AttributeError, match=r"Simulation has no method gaussian\(\)"):
         sim.gaussian()  # type: ignore[attr-defined]
 
 
 def test_unknown_method_no_guidance(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).gaussian()
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
     with pytest.raises(AttributeError, match="^foobar$"):
         resp.foobar()  # type: ignore[attr-defined]
 
 
 def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).gaussian()
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
     assert not hasattr(resp, "censor")
     assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "discretize")
@@ -183,6 +179,6 @@ def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
 
 def test_valid_method_still_works(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
-    resp = Simulation(N, T, p).fixed_effects(k=k).gaussian()
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
     resp_with_missing = resp.missing_y(0.1)
     assert type(resp_with_missing).__name__ == "Response"
