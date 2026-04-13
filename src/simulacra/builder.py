@@ -82,7 +82,7 @@ class Covariate:
         return type(self)(self._pipeline.apply(min_max_scale, low=low, high=high))
 
     @step
-    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> "Predictor":
+    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         return Predictor(self._pipeline.apply(fixed_effects, k=k, beta=beta))
 
 
@@ -133,7 +133,7 @@ class Simulation:
         )
 
     @step
-    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> "Predictor":
+    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
         step_fn = chain(resolve_design, partial(fixed_effects, k=k, beta=beta))
         return Predictor(
             self._pipeline.then(step_fn, label(fixed_effects, k=k, beta=beta))
@@ -177,13 +177,13 @@ class Response(_ResponsePipeline[ResponseData]): ...
 
 class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     @step
-    def competing_risks(self) -> "CompetingResponse":
+    def competing_risks(self) -> CompetingResponse:
         return CompetingResponse(self._pipeline.apply(competing_risks))
 
     @step
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> "Survival":
+    ) -> Survival:
         return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
 
 
@@ -191,13 +191,13 @@ class CompetingResponse(_ResponsePipeline[EventTimeData]):
     @step
     def censor(
         self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
-    ) -> "Survival":
+    ) -> Survival:
         return Survival(self._pipeline.apply(censor, dropout=dropout, horizon=horizon))
 
 
 class Survival(_ResponsePipeline[SurvivalData]):
     @step
-    def discretize(self, boundaries: Tensor) -> "DiscreteSurvival":
+    def discretize(self, boundaries: Tensor) -> DiscreteSurvival:
         return DiscreteSurvival(self._pipeline.apply(discretize, boundaries=boundaries))
 
 
@@ -330,7 +330,7 @@ class Predictor(_FamilyPipeline):
         W: Prior | None = None,
         B: Prior = UNIT_NORMAL,
         b: Prior = UNIT_NORMAL,
-    ) -> "Predictor":
+    ) -> Predictor:
         # design choice: default to soft level assignments
         w = W or dist.Dirichlet(torch.ones(levels))
         step_fn = suffixed(
@@ -345,7 +345,7 @@ class Predictor(_FamilyPipeline):
         )
 
     @step
-    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> "Predictor":
+    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
         return Predictor(
             self._pipeline.then(partial(activation, fn=fn), label(activation)),
             re_count=self._re_count,
@@ -353,7 +353,7 @@ class Predictor(_FamilyPipeline):
         )
 
     @step
-    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> "Predictor":
+    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
         step_fn = suffixed(
             partial(projection, output=output, weight=weight), self._proj_count
         )
@@ -371,7 +371,7 @@ class Predictor(_FamilyPipeline):
         vocab_size: int,
         weight: Prior = UNIT_NORMAL,
         temperature: float | Tensor = 1.0,
-    ) -> "Predictor":
+    ) -> Predictor:
         step_fn = partial(
             tokenize, vocab_size=vocab_size, weight=weight, temperature=temperature
         )
@@ -382,7 +382,7 @@ class Predictor(_FamilyPipeline):
         )
 
     @step
-    def constant_target(self) -> "ConstantPredictor":
+    def constant_target(self) -> ConstantPredictor:
         recipe = (*self._pipeline.recipe, label(constant_target))
         return ConstantPredictor(Pipeline(self._pipeline.run, recipe))
 

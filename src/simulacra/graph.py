@@ -4,8 +4,6 @@ Provides a ``@step`` marker decorator and a ``build_graph`` function that
 extracts the valid transition graph from type annotations at import time.
 """
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Self, get_type_hints
