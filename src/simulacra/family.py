@@ -3,7 +3,8 @@ import torch.distributions as dist
 from torch import Tensor
 
 from .states import PredictorData, Prior, ResponseData, promote
-from .transforms import Step, resolve
+from .pipeline import Step
+from .transforms import resolve
 
 type Family = Step[PredictorData, ResponseData]
 

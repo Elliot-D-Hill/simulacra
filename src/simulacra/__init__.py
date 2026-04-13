@@ -24,7 +24,8 @@ from .states import (
     SurvivalData,
 )
 from .states import promote
-from .transforms import Pipeline, Run, Step, chain, label, resolve
+from .pipeline import Pipeline, Run, Step, chain, label
+from .transforms import resolve
 
 __all__ = [
     "CompetingResponse",

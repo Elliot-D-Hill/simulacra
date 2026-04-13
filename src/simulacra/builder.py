@@ -30,12 +30,11 @@ from .states import (
     SurvivalData,
 )
 from .survival import EXP1, censor, competing_risks, discretize
+from .pipeline import Pipeline, label
 from .transforms import (
-    Pipeline,
     activation,
     constant_y,
     fixed_effects,
-    label,
     min_max_scale,
     missing_x,
     missing_y,
