@@ -20,14 +20,22 @@ def chain[S, M, T](first: Step[S, M], second: Step[M, T]) -> Step[S, T]:
 
 
 def _format(v: object) -> str:
-    if isinstance(v, Tensor):
-        return f"tensor({v.item():.4g})" if v.ndim == 0 else f"Tensor{tuple(v.shape)}"
-    return repr(v)
+    match v:
+        case Tensor() if v.ndim == 0:
+            return f"tensor({v.item():.4g})"
+        case Tensor():
+            return f"Tensor{tuple(v.shape)}"
+        case partial():
+            return label(v.func, **v.keywords)
+        case Callable():
+            return getattr(v, "__name__", repr(v))
+        case _:
+            return repr(v)
 
 
-def label(fn: Callable[..., object], **kwargs: object) -> str:
+def label(transform: Callable[..., object], **kwargs: object) -> str:
     parts = ", ".join(f"{k}={_format(v)}" for k, v in kwargs.items())
-    return f"{fn.__name__}({parts})"
+    return f"{transform.__name__}({parts})"
 
 
 @dataclass(frozen=True)
@@ -35,12 +43,10 @@ class Pipeline[S]:
     run: Run[S]
     recipe: tuple[str, ...]
 
-    def then[T](self, step: Step[S, T], label: str) -> Pipeline[T]:
-        return Pipeline(chain(self.run, step), (*self.recipe, label))
-
-    def apply[T](self, fn: Callable[..., T], **kwargs: object) -> Pipeline[T]:
+    def apply[T](self, transform: Callable[..., T], **kwargs: object) -> Pipeline[T]:
         return Pipeline(
-            chain(self.run, partial(fn, **kwargs)), (*self.recipe, label(fn, **kwargs))
+            chain(self.run, partial(transform, **kwargs)),
+            (*self.recipe, label(transform, **kwargs)),
         )
 
     def __repr__(self) -> str:
@@ -94,6 +100,10 @@ def missing_x[S: CovariateData](data: S, proportion: float) -> S:
 def missing_y[S: ResponseData](data: S, proportion: float) -> S:
     mask = torch.rand_like(data.y) < proportion
     return replace(data, y=data.y.masked_fill(mask, float("nan")))
+
+
+def constant_y[S: ResponseData](data: S) -> S:
+    return replace(data, y=data.y[..., :1, :].expand_as(data.y))
 
 
 def min_max_scale[S: CovariateData](data: S, low: float = 0.0, high: float = 1.0) -> S:

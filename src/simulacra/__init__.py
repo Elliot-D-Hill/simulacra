@@ -3,7 +3,6 @@ from .builder import (
     UNIT_NORMAL,
     UNIT_VARIANCE,
     CompetingResponse,
-    ConstantPredictor,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
@@ -29,7 +28,6 @@ from .transforms import Pipeline, Run, Step, chain, label, resolve
 
 __all__ = [
     "CompetingResponse",
-    "ConstantPredictor",
     "CovariateData",
     "DiscreteSurvival",
     "DiscreteSurvivalData",

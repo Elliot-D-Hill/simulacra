@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from functools import partial
 from typing import Final, NoReturn, Self, overload
 
 import torch
@@ -7,11 +6,9 @@ import torch.distributions as dist
 from torch import Tensor
 
 from .family import (
-    Family,
     bernoulli,
     binomial,
     categorical,
-    constant_target,
     exponential,
     gamma,
     gaussian,
@@ -36,6 +33,7 @@ from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
     Pipeline,
     activation,
+    constant_y,
     fixed_effects,
     label,
     min_max_scale,
@@ -50,10 +48,6 @@ from .transforms import (
 
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
-
-
-def _identity[T](x: T) -> T:
-    return x
 
 
 class Simulation:
@@ -129,6 +123,10 @@ class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
     def missing_y(self, proportion: float) -> Self:
         return type(self)(self._pipeline.apply(missing_y, proportion=proportion))
 
+    @step
+    def constant_y(self) -> Self:
+        return type(self)(self._pipeline.apply(constant_y))
+
 
 class Response(_ResponsePipeline[ResponseData]): ...
 
@@ -160,14 +158,6 @@ class DiscreteSurvival(_ResponsePipeline[DiscreteSurvivalData]): ...
 
 
 class _FamilyPipeline(_Pipeline[PredictorData]):
-    def __init__(
-        self,
-        pipeline: Pipeline[PredictorData],
-        wrap: Callable[[Family], Family] = _identity,
-    ) -> None:
-        super().__init__(pipeline)
-        self._wrap = wrap
-
     @overload
     def _family(
         self,
@@ -188,8 +178,7 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
         cls: type[_ResponsePipeline[ResponseData]] = Response,
         **kwargs: object,
     ) -> _ResponsePipeline[ResponseData]:
-        family = partial(fn, **kwargs)
-        return cls(self._pipeline.then(self._wrap(family), label(fn, **kwargs)))
+        return cls(self._pipeline.apply(fn, **kwargs))
 
     @step
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
@@ -259,9 +248,7 @@ class Predictor(_FamilyPipeline):
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
-        return Predictor(
-            self._pipeline.then(partial(activation, fn=fn), label(activation))
-        )
+        return Predictor(self._pipeline.apply(activation, fn=fn))
 
     @step
     def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
@@ -280,21 +267,10 @@ class Predictor(_FamilyPipeline):
             )
         )
 
-    @step
-    def constant_target(self) -> ConstantPredictor:
-        recipe = (*self._pipeline.recipe, label(constant_target))
-        return ConstantPredictor(Pipeline(self._pipeline.run, recipe))
-
-
-class ConstantPredictor(_FamilyPipeline):
-    def __init__(self, pipeline: Pipeline[PredictorData]) -> None:
-        super().__init__(pipeline, wrap=lambda f: partial(constant_target, family=f))
-
 
 GRAPH: Final[Graph] = build_graph(
     Simulation,
     Predictor,
-    ConstantPredictor,
     Response,
     PositiveSupportResponse,
     CompetingResponse,

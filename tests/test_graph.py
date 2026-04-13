@@ -3,7 +3,6 @@ import pytest
 from simulacra import (
     GRAPH,
     CompetingResponse,
-    ConstantPredictor,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
@@ -15,7 +14,6 @@ from simulacra import (
 
 ALL_STATES: set[type] = {
     CompetingResponse,
-    ConstantPredictor,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
@@ -39,7 +37,6 @@ def test_predictor_transitions() -> None:
         "random_effects",
         "activation",
         "projection",
-        "constant_target",
         "tokenize",
         "gaussian",
         "poisson",
@@ -57,46 +54,28 @@ def test_predictor_transitions() -> None:
     assert GRAPH.methods_on(Predictor) == expected
 
 
-def test_constant_predictor_transitions() -> None:
-    expected = {
-        "gaussian",
-        "poisson",
-        "bernoulli",
-        "binomial",
-        "negative_binomial",
-        "categorical",
-        "gamma",
-        "log_normal",
-        "weibull",
-        "exponential",
-        "log_logistic",
-        "gompertz",
-    }
-    assert GRAPH.methods_on(ConstantPredictor) == expected
-
-
 def test_response_transitions() -> None:
-    expected = {"missing_x", "missing_y"}
+    expected = {"missing_x", "missing_y", "constant_y"}
     assert GRAPH.methods_on(Response) == expected
 
 
 def test_positive_support_response_transitions() -> None:
-    expected = {"competing_risks", "censor", "missing_x", "missing_y"}
+    expected = {"competing_risks", "censor", "missing_x", "missing_y", "constant_y"}
     assert GRAPH.methods_on(PositiveSupportResponse) == expected
 
 
 def test_competing_response_transitions() -> None:
-    expected = {"censor", "missing_x", "missing_y"}
+    expected = {"censor", "missing_x", "missing_y", "constant_y"}
     assert GRAPH.methods_on(CompetingResponse) == expected
 
 
 def test_survival_transitions() -> None:
-    expected = {"discretize", "missing_x", "missing_y"}
+    expected = {"discretize", "missing_x", "missing_y", "constant_y"}
     assert GRAPH.methods_on(Survival) == expected
 
 
 def test_discrete_survival_transitions() -> None:
-    expected = {"missing_x", "missing_y"}
+    expected = {"missing_x", "missing_y", "constant_y"}
     assert GRAPH.methods_on(DiscreteSurvival) == expected
 
 
@@ -114,7 +93,6 @@ def test_family_targets() -> None:
     assert targets["gaussian"] is Response
     assert targets["weibull"] is PositiveSupportResponse
     assert targets["random_effects"] is Predictor
-    assert targets["constant_target"] is ConstantPredictor
 
 
 def test_to_state_survival() -> None:

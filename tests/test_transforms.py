@@ -418,15 +418,13 @@ def test_mlp_pipeline(dims: tuple[int, int, int, int]) -> None:
     assert len(data.projection_weight) == 1
 
 
-# --- constant target ---
+# --- constant y ---
 
 
-def test_constant_target_gaussian(dims: tuple[int, int, int, int]) -> None:
-    """constant_target pools eta so y is identical at every timepoint."""
+def test_constant_y_gaussian(dims: tuple[int, int, int, int]) -> None:
+    """constant_y broadcasts y so it is identical at every timepoint."""
     N, T, p, k = dims
-    data = (
-        simulate(N, T, p).fixed_effects(k=k).constant_target().gaussian().draw(seed=0)
-    )
+    data = simulate(N, T, p).fixed_effects(k=k).gaussian().constant_y().draw(seed=0)
     assert data.y.shape == (N, T, k)
     assert data.X.shape == (N, T, p)
     assert data.eta.shape == (N, T, k)
@@ -434,33 +432,31 @@ def test_constant_target_gaussian(dims: tuple[int, int, int, int]) -> None:
         assert data.y[:, 0, :].equal(data.y[:, i, :])
 
 
-def test_constant_target_poisson(dims: tuple[int, int, int, int]) -> None:
-    """constant_target works with poisson family."""
+def test_constant_y_poisson(dims: tuple[int, int, int, int]) -> None:
+    """constant_y works with poisson family."""
     N, T, p, k = dims
-    data = simulate(N, T, p).fixed_effects(k=k).constant_target().poisson().draw(seed=0)
+    data = simulate(N, T, p).fixed_effects(k=k).poisson().constant_y().draw(seed=0)
     for i in range(1, T):
         assert data.y[:, 0, :].equal(data.y[:, i, :])
 
 
-def test_constant_target_bernoulli(dims: tuple[int, int, int, int]) -> None:
-    """constant_target works with bernoulli family."""
+def test_constant_y_bernoulli(dims: tuple[int, int, int, int]) -> None:
+    """constant_y works with bernoulli family."""
     N, T, p, k = dims
-    data = (
-        simulate(N, T, p).fixed_effects(k=k).constant_target().bernoulli().draw(seed=0)
-    )
+    data = simulate(N, T, p).fixed_effects(k=k).bernoulli().constant_y().draw(seed=0)
     for i in range(1, T):
         assert data.y[:, 0, :].equal(data.y[:, i, :])
 
 
-def test_constant_target_with_draws(dims: tuple[int, int, int, int]) -> None:
-    """Draws dimension works with constant_target."""
+def test_constant_y_with_draws(dims: tuple[int, int, int, int]) -> None:
+    """Draws dimension works with constant_y."""
     N, T, p, k = dims
     D = 7
     data = (
         simulate(N, T, p)
         .fixed_effects(k=k)
-        .constant_target()
         .gaussian()
+        .constant_y()
         .draw(seed=0, draws=D)
     )
     assert data.y.shape == (D, N, T, k)
@@ -469,7 +465,7 @@ def test_constant_target_with_draws(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_normal_y_varies_along_time(dims: tuple[int, int, int, int]) -> None:
-    """Without constant_target, y varies along T."""
+    """Without constant_y, y varies along T."""
     N, T, p, k = dims
     data = simulate(N, T, p).fixed_effects(k=k).gaussian().draw(seed=0)
     assert not data.y[:, 0, :].equal(data.y[:, 1, :])

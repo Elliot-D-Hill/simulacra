@@ -1,5 +1,3 @@
-from dataclasses import replace
-
 import torch
 import torch.distributions as dist
 from torch import Tensor
@@ -80,10 +78,3 @@ def gompertz(data: PredictorData, shape: float | Tensor) -> ResponseData:
     u = torch.rand_like(data.eta)
     y = (1.0 / shape) * torch.log1p(-shape * u.log() / rate)
     return promote(ResponseData, data, y=y)
-
-
-def constant_target(data: PredictorData, family: Family) -> ResponseData:
-    """Pool eta over T, sample once per subject, broadcast y back."""
-    pooled = replace(data, eta=data.eta.mean(dim=-2, keepdim=True))
-    result = family(pooled)
-    return replace(result, eta=data.eta, y=result.y.expand_as(data.eta))

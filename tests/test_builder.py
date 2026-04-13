@@ -83,15 +83,11 @@ def test_survival_methods(dims: tuple[int, int, int, int]) -> None:
     assert hasattr(surv, "discretize")
 
 
-def test_constant_predictor_methods(dims: tuple[int, int, int, int]) -> None:
-    """ConstantPredictor has families and draw, but no RE or double-pooling."""
+def test_constant_y_available_on_response(dims: tuple[int, int, int, int]) -> None:
+    """constant_y is available on all response types."""
     N, T, p, k = dims
-    seq = simulate(N, T, p).fixed_effects(k=k).constant_target()
-    assert not hasattr(seq, "constant_target")
-    assert not hasattr(seq, "random_effects")
-    assert hasattr(seq, "gaussian")
-    assert hasattr(seq, "draw")
-    assert not hasattr(seq, "missing_x")
+    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
+    assert hasattr(resp, "constant_y")
 
 
 def test_self_transition_preserves_methods(dims: tuple[int, int, int, int]) -> None:
