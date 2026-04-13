@@ -7,16 +7,6 @@ type Prior = dist.Distribution | Tensor
 
 
 @dataclass(frozen=True)
-class InitialData:
-    draws: tuple[int, ...]
-    n: int
-    t: int
-    p: int
-    X: Prior
-    coordinates: Prior
-
-
-@dataclass(frozen=True)
 class CovariateData:
     X: Tensor  # [*draws, N, T, p]
     coordinates: Tensor  # [*draws, N, T, D]

@@ -6,14 +6,7 @@ import torch
 import torch.distributions as dist
 from torch import Tensor
 
-from .states import (
-    CovariateData,
-    InitialData,
-    PredictorData,
-    Prior,
-    RandomEffect,
-    ResponseData,
-)
+from .states import CovariateData, PredictorData, Prior, RandomEffect, ResponseData
 
 type Step[S, T] = Callable[[S], T]
 type Run[S] = Step[tuple[int, ...], S]
@@ -64,20 +57,6 @@ def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
     )
 
 
-def resolve_design(data: InitialData) -> CovariateData:
-    basis = resolve(data.X, (*data.draws, data.n, data.t, data.p))
-    match data.coordinates:
-        case Tensor():
-            coords = data.coordinates
-            if coords.ndim == 1:
-                coords = coords.unsqueeze(-1)
-            coords = coords.expand_as(basis[..., :1])
-        case dist.Distribution():
-            increments = resolve(data.coordinates, (*data.draws, data.n, data.t))
-            coords = increments.cumsum(dim=-1).unsqueeze(-1)
-    return CovariateData(X=basis, coordinates=coords)
-
-
 def fixed_effects(data: CovariateData, k: int, beta: Prior) -> PredictorData:
     *batch, _, _, p = data.X.shape
     coefficient = resolve(beta, (*batch, 1, p, k))
@@ -105,14 +84,6 @@ def random_effects(
             RandomEffect(W=membership, B=basis, b=coefficient),
         ),
     )
-
-
-def covariates(data: InitialData, X: Prior) -> InitialData:
-    return replace(data, X=X)
-
-
-def points(data: InitialData, coordinates: Prior) -> InitialData:
-    return replace(data, coordinates=coordinates)
 
 
 def missing_x[S: CovariateData](data: S, proportion: float) -> S:

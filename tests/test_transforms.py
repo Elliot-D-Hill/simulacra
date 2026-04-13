@@ -75,12 +75,11 @@ def test_z_score_with_draws(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_covariates_then_scaling(dims: tuple[int, int, int, int]) -> None:
-    """Custom X via covariates flows through z_score into fixed_effects."""
+    """Custom X flows through z_score into fixed_effects."""
     N, T, p, k = dims
     X_custom = torch.randn(N, T, p) * 10.0 + 50.0
     data = (
-        Simulation(N, T, p)
-        .covariates(X=X_custom)
+        Simulation(N, T, p, X=X_custom)
         .z_score()
         .fixed_effects(k=k)
         .gaussian()
@@ -106,46 +105,17 @@ def test_chained_scalings(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_custom_coordinates(dims: tuple[int, int, int, int]) -> None:
-    """Custom coordinates via points survive through the pipeline."""
+    """Custom coordinates survive through the pipeline."""
     N, T, p, k = dims
     custom_coords = torch.linspace(0.0, 10.0, T)
     data = (
-        Simulation(N, T, p)
-        .points(coordinates=custom_coords)
+        Simulation(N, T, p, coordinates=custom_coords)
         .fixed_effects(k=k)
         .gaussian()
         .draw(seed=0)
     )
     expected = custom_coords.unsqueeze(-1).expand(N, T, 1)
     assert data.coordinates.equal(expected)
-
-
-def test_covariates_and_points_order_independent(
-    dims: tuple[int, int, int, int],
-) -> None:
-    """covariates and points can be called in either order."""
-    N, T, p, k = dims
-    X_custom = torch.randn(N, T, p)
-    custom_coords = torch.linspace(0.0, 10.0, T)
-    d1 = (
-        Simulation(N, T, p)
-        .covariates(X=X_custom)
-        .points(coordinates=custom_coords)
-        .fixed_effects(k=k)
-        .gaussian()
-        .draw(seed=0)
-    )
-    d2 = (
-        Simulation(N, T, p)
-        .points(coordinates=custom_coords)
-        .covariates(X=X_custom)
-        .fixed_effects(k=k)
-        .gaussian()
-        .draw(seed=0)
-    )
-    assert d1.X.equal(d2.X)
-    assert d1.coordinates.equal(d2.coordinates)
-    assert d1.y.equal(d2.y)
 
 
 # --- missing data ---

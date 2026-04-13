@@ -31,7 +31,7 @@ def test_graph_contains_all_concrete_classes() -> None:
 
 
 def test_simulation_transitions() -> None:
-    expected = {"covariates", "points", "z_score", "min_max_scale", "fixed_effects"}
+    expected = {"z_score", "min_max_scale", "fixed_effects"}
     assert GRAPH.methods_on(Simulation) == expected
 
 
@@ -108,11 +108,6 @@ def test_discrete_survival_transitions() -> None:
 
 def test_self_transitions_resolve_to_source() -> None:
     """Self targets are stored as None, not the base class."""
-    simulation_transitions = {
-        (t.method, t.target) for t in GRAPH.from_state(Simulation)
-    }
-    assert ("points", None) in simulation_transitions
-    assert ("covariates", None) in simulation_transitions
     covariate_transitions = {(t.method, t.target) for t in GRAPH.from_state(Covariate)}
     assert ("z_score", None) in covariate_transitions
     assert ("min_max_scale", None) in covariate_transitions

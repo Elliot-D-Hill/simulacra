@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from dataclasses import replace
 from functools import partial
 from typing import Final, NoReturn, Self, overload
 
@@ -28,7 +27,6 @@ from .states import (
     CovariateData,
     DiscreteSurvivalData,
     EventTimeData,
-    InitialData,
     PredictorData,
     Prior,
     ResponseData,
@@ -38,17 +36,14 @@ from .survival import EXP1, censor, competing_risks, discretize
 from .transforms import (
     Pipeline,
     activation,
-    chain,
-    covariates,
     fixed_effects,
     label,
     min_max_scale,
     missing_x,
     missing_y,
-    points,
     projection,
     random_effects,
-    resolve_design,
+    resolve,
     tokenize,
     z_score,
 )
@@ -85,21 +80,31 @@ class Covariate:
 
 
 class Simulation:
-    def __init__(self, n: int, t: int = 1, p: int = 1) -> None:
-        coordinates = torch.arange(t, dtype=torch.float).unsqueeze(-1)
-        initial = InitialData(
-            draws=(), n=n, t=t, p=p, X=UNIT_NORMAL, coordinates=coordinates
-        )
-        self._pipeline = Pipeline(
-            run=lambda draws: replace(initial, draws=draws),
-            recipe=(f"Simulation(n={n}, t={t}, p={p})",),
-        )
+    def __init__(
+        self,
+        n: int,
+        t: int = 1,
+        p: int = 1,
+        X: Prior = UNIT_NORMAL,
+        coordinates: Prior = EXP1,
+    ) -> None:
+        def run(draws: tuple[int, ...]) -> CovariateData:
+            basis = resolve(X, (*draws, n, t, p))
+            match coordinates:
+                case Tensor():
+                    coords = coordinates
+                    if coords.ndim == 1:
+                        coords = coords.unsqueeze(-1)
+                    coords = coords.expand_as(basis[..., :1])
+                case dist.Distribution():
+                    increments = resolve(coordinates, (*draws, n, t))
+                    coords = increments.cumsum(dim=-1).unsqueeze(-1)
+            return CovariateData(X=basis, coordinates=coords)
 
-    @classmethod
-    def _from_pipeline(cls, pipeline: Pipeline[InitialData]) -> Self:
-        obj = cls.__new__(cls)
-        obj._pipeline = pipeline
-        return obj
+        self._pipeline: Pipeline[CovariateData] = Pipeline(
+            run=run,
+            recipe=(label(type(self), n=n, t=t, p=p, X=X, coordinates=coordinates),),
+        )
 
     def __repr__(self) -> str:
         return "\n  .".join(self._pipeline.recipe) or type(self).__name__
@@ -108,30 +113,16 @@ class Simulation:
         raise guide(self, name, GRAPH)
 
     @step
-    def covariates(self, X: Prior = UNIT_NORMAL) -> Self:
-        return type(self)._from_pipeline(self._pipeline.apply(covariates, X=X))
-
-    @step
-    def points(self, coordinates: Prior = EXP1) -> Self:
-        return type(self)._from_pipeline(
-            self._pipeline.apply(points, coordinates=coordinates)
-        )
-
-    def _covariate[T](self, fn: Callable[..., T], **kwargs: object) -> Pipeline[T]:
-        step_fn = chain(resolve_design, partial(fn, **kwargs))
-        return self._pipeline.then(step_fn, label(fn, **kwargs))
-
-    @step
     def z_score(self) -> Covariate:
-        return Covariate(self._covariate(z_score))
+        return Covariate(self._pipeline.apply(z_score))
 
     @step
     def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Covariate:
-        return Covariate(self._covariate(min_max_scale, low=low, high=high))
+        return Covariate(self._pipeline.apply(min_max_scale, low=low, high=high))
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
-        return Predictor(self._covariate(fixed_effects, k=k, beta=beta))
+        return Predictor(self._pipeline.apply(fixed_effects, k=k, beta=beta))
 
 
 class _Pipeline[S: PredictorData]:

@@ -103,15 +103,12 @@ def test_covariate_methods(dims: tuple[int, int, int, int]) -> None:
     assert hasattr(cov, "fixed_effects")
     assert not hasattr(cov, "gaussian")
     assert not hasattr(cov, "draw")
-    assert not hasattr(cov, "covariates")
 
 
-def test_simulation_configurators(dims: tuple[int, int, int, int]) -> None:
-    """covariates and points return Simulation; scaling returns Covariate."""
+def test_simulation_methods(dims: tuple[int, int, int, int]) -> None:
+    """Simulation exposes covariate transforms and fixed_effects."""
     N, T, p, _ = dims
     sim = Simulation(N, T, p)
-    assert hasattr(sim, "covariates")
-    assert hasattr(sim, "points")
     assert hasattr(sim, "z_score")
     assert hasattr(sim, "min_max_scale")
     assert hasattr(sim, "fixed_effects")
@@ -193,13 +190,7 @@ def test_concrete_tensor_prior(dims: tuple[int, int, int, int]) -> None:
     """A concrete tensor passed as X via covariates flows through unchanged."""
     N, T, p, k = dims
     X_fixed = torch.ones(N, T, p)
-    data = (
-        Simulation(N, T, p)
-        .covariates(X=X_fixed)
-        .fixed_effects(k=k)
-        .gaussian()
-        .draw(seed=0)
-    )
+    data = Simulation(N, T, p, X=X_fixed).fixed_effects(k=k).gaussian().draw(seed=0)
     assert data.X.equal(X_fixed)
 
 
