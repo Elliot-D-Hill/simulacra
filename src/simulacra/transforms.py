@@ -118,4 +118,5 @@ def tokenize[S: PredictorData](
     *batch, _, _, k_in = data.eta.shape
     w = resolve(weight, (*batch, 1, k_in, vocab_size))
     logits = data.eta @ w / temperature
-    return replace(data, tokens=dist.Categorical(logits=logits).sample()), {"weight": w.squeeze(-3)}
+    tokens = dist.Categorical(logits=logits).sample()
+    return replace(data, tokens=tokens), {"weight": w.squeeze(-3)}
