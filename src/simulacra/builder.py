@@ -152,7 +152,51 @@ class Survival(_ResponsePipeline[SurvivalData]):
 class DiscreteSurvival(_ResponsePipeline[DiscreteSurvivalData]): ...
 
 
-class _FamilyPipeline(_Pipeline[PredictorData]):
+class Predictor(_Pipeline[PredictorData]):
+    @step
+    def random_effects(
+        self,
+        levels: int,
+        q: int = 1,
+        *,
+        W: Prior | None = None,
+        B: Prior = UNIT_NORMAL,
+        b: Prior = UNIT_NORMAL,
+    ) -> Predictor:
+        # design choice: default to soft level assignments
+        return self._step(
+            Predictor,
+            random_effects,
+            levels=levels,
+            q=q,
+            W=W or dist.Dirichlet(torch.ones(levels)),
+            B=B,
+            b=b,
+        )
+
+    @step
+    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
+        return self._step(Predictor, activation, fn=fn)
+
+    @step
+    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
+        return self._step(Predictor, projection, output=output, weight=weight)
+
+    @step
+    def tokenize(
+        self,
+        vocab_size: int,
+        weight: Prior = UNIT_NORMAL,
+        temperature: float | Tensor = 1.0,
+    ) -> Predictor:
+        return self._step(
+            Predictor,
+            tokenize,
+            vocab_size=vocab_size,
+            weight=weight,
+            temperature=temperature,
+        )
+
     @step
     def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
         return self._step(Response, gaussian, covariance=covariance)
@@ -200,52 +244,6 @@ class _FamilyPipeline(_Pipeline[PredictorData]):
     @step
     def gompertz(self, shape: float | Tensor = 1.0) -> PositiveSupportResponse:
         return self._step(PositiveSupportResponse, gompertz, shape=shape)
-
-
-class Predictor(_FamilyPipeline):
-    @step
-    def random_effects(
-        self,
-        levels: int,
-        q: int = 1,
-        *,
-        W: Prior | None = None,
-        B: Prior = UNIT_NORMAL,
-        b: Prior = UNIT_NORMAL,
-    ) -> Predictor:
-        # design choice: default to soft level assignments
-        return self._step(
-            Predictor,
-            random_effects,
-            levels=levels,
-            q=q,
-            W=W or dist.Dirichlet(torch.ones(levels)),
-            B=B,
-            b=b,
-        )
-
-    @step
-    def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
-        return self._step(Predictor, activation, fn=fn)
-
-    @step
-    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
-        return self._step(Predictor, projection, output=output, weight=weight)
-
-    @step
-    def tokenize(
-        self,
-        vocab_size: int,
-        weight: Prior = UNIT_NORMAL,
-        temperature: float | Tensor = 1.0,
-    ) -> Predictor:
-        return self._step(
-            Predictor,
-            tokenize,
-            vocab_size=vocab_size,
-            weight=weight,
-            temperature=temperature,
-        )
 
 
 GRAPH: Final[Graph] = build_graph(
