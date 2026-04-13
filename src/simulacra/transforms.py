@@ -55,7 +55,7 @@ class Pipeline[S]:
         )
 
     def __repr__(self) -> str:
-        return "\n  .".join(self.recipe) or "Pipeline"
+        return "\n.".join(self.recipe) or "Pipeline"
 
 
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:

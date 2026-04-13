@@ -55,7 +55,7 @@ class _Pipeline[S]:
         self._pipeline = pipeline
 
     def __repr__(self) -> str:
-        return "\n  .".join(self._pipeline.recipe) or type(self).__name__
+        return "\n.".join(self._pipeline.recipe) or type(self).__name__
 
     def __getattr__(self, name: str) -> NoReturn:
         raise guide(self, name, GRAPH)
