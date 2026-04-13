@@ -61,12 +61,12 @@ class Simulation:
         raise guide(self, name, GRAPH)
 
     @step
-    def z_score(self) -> Self:
-        return type(self)(self._pipeline.apply(z_score))
+    def z_score(self) -> Simulation:
+        return Simulation(self._pipeline.apply(z_score))
 
     @step
-    def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Self:
-        return type(self)(self._pipeline.apply(min_max_scale, low=low, high=high))
+    def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Simulation:
+        return Simulation(self._pipeline.apply(min_max_scale, low=low, high=high))
 
     @step
     def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
@@ -241,9 +241,15 @@ class Predictor(_FamilyPipeline):
         b: Prior = UNIT_NORMAL,
     ) -> Predictor:
         # design choice: default to soft level assignments
-        w = W or dist.Dirichlet(torch.ones(levels))
         return Predictor(
-            self._pipeline.apply(random_effects, levels=levels, q=q, W=w, B=B, b=b)
+            self._pipeline.apply(
+                random_effects,
+                levels=levels,
+                q=q,
+                W=W or dist.Dirichlet(torch.ones(levels)),
+                B=B,
+                b=b,
+            )
         )
 
     @step

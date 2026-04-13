@@ -27,10 +27,8 @@ def _format(v: object) -> str:
             return f"Tensor{tuple(v.shape)}"
         case partial():
             return label(v.func, **v.keywords)
-        case Callable():
-            return getattr(v, "__name__", repr(v))
         case _:
-            return repr(v)
+            return getattr(v, "__name__", repr(v))
 
 
 def label(transform: Callable[..., object], **kwargs: object) -> str:

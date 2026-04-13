@@ -55,7 +55,7 @@ class Graph:
 
     def to_state(self, state: type) -> tuple[Transition, ...]:
         """Transitions entering *state*."""
-        return tuple(t for t in self.transitions if t.target is state)
+        return tuple(t for t in self.transitions if (t.target or t.source) is state)
 
     def methods_on(self, state: type) -> frozenset[str]:
         """Method names valid on *state*."""
@@ -97,7 +97,7 @@ def build_graph(*state_classes: type) -> Graph:
                     continue
                 hints = get_type_hints(method)
                 target = hints.get("return")
-                if target is Self:
+                if target is Self or target is cls:
                     transitions.append(Transition(cls, name, None))
                 elif isinstance(target, type) and target.__name__ in known:
                     transitions.append(Transition(cls, name, target))

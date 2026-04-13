@@ -79,25 +79,29 @@ def test_discrete_survival_transitions() -> None:
     assert GRAPH.methods_on(DiscreteSurvival) == expected
 
 
-def test_self_transitions_resolve_to_source() -> None:
-    """Self targets are stored as None, not the base class."""
+def test_same_type_transitions_are_self() -> None:
+    """Same-type transitions are stored as None regardless of annotation."""
     simulation_transitions = {
         (t.method, t.target) for t in GRAPH.from_state(Simulation)
     }
     assert ("z_score", None) in simulation_transitions
     assert ("min_max_scale", None) in simulation_transitions
+    predictor_targets = {t.method: t.target for t in GRAPH.from_state(Predictor)}
+    assert predictor_targets["random_effects"] is None
+    assert predictor_targets["activation"] is None
+    assert predictor_targets["projection"] is None
+    assert predictor_targets["tokenize"] is None
 
 
 def test_family_targets() -> None:
     targets = {t.method: t.target for t in GRAPH.from_state(Predictor)}
     assert targets["gaussian"] is Response
     assert targets["weibull"] is PositiveSupportResponse
-    assert targets["random_effects"] is Predictor
 
 
 def test_to_state_survival() -> None:
     sources = {t.source for t in GRAPH.to_state(Survival)}
-    assert sources == {PositiveSupportResponse, CompetingResponse}
+    assert sources == {Survival, PositiveSupportResponse, CompetingResponse}
 
 
 def test_owners_of_censor() -> None:
