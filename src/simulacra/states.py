@@ -1,4 +1,5 @@
 from dataclasses import MISSING, dataclass, field, fields
+from typing import cast
 
 import torch.distributions as dist
 from torch import Tensor
@@ -12,8 +13,9 @@ def _format_field(val: object) -> str:
             return f"tensor({val.item():.4g})"
         case Tensor():
             return str(list(val.shape))
-        case (Tensor(), *_):
-            return "(" + ", ".join(str(list(v.shape)) for v in val) + ",)"
+        case tuple():
+            tensors = cast(tuple[Tensor, ...], val)
+            return "(" + ", ".join(str(list(v.shape)) for v in tensors) + ",)"
         case _:
             return repr(val)
 

@@ -21,6 +21,10 @@ dev = [
     "ruff>=0.15.9",
 ]
 
+[tool.pyright]
+include = ["src", "tests"]
+strict = ["src", "tests"]
+
 [tool.ruff.format]
 skip-magic-trailing-comma = true
 
