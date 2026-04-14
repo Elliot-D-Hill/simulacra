@@ -1,7 +1,7 @@
 [project]
 name = "simulacra"
 version = "0.1.0"
-description = "Add your description here"
+description = "Data simulation for machine learning and statistics."
 readme = "README.md"
 authors = [{ name = "Elliot Hill", email = "elliot.douglas.hill@gmail.com" }]
 requires-python = ">=3.14"
