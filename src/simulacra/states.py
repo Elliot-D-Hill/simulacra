@@ -1,7 +1,8 @@
-from dataclasses import MISSING, dataclass, field, fields
+from dataclasses import dataclass, fields
 from typing import cast
 
 import torch.distributions as dist
+from jaxtyping import Float
 from torch import Tensor
 
 type Prior = dist.Distribution | Tensor
@@ -21,62 +22,55 @@ def _format_field(val: object) -> str:
 
 
 def _data_repr(self: object) -> str:
-    parts: list[str] = []
-    for f in fields(self):  # type: ignore[arg-type]
-        val = getattr(self, f.name)
-        if f.default is not MISSING and (val is f.default or val == f.default):
-            continue
-        parts.append(f"    {f.name}: {_format_field(val)}")
+    parts = [
+        f"    {f.name}: {_format_field(getattr(self, f.name))}"
+        for f in fields(self)  # type: ignore[arg-type]
+    ]
     body = "\n".join(parts)
     return f"{type(self).__name__}(\n{body}\n)"
 
 
-@dataclass(frozen=True, repr=False)
-class CovariateData:
-    X: Tensor  # [*draws, N, T, p]
-    points: Tensor  # [*draws, N, T, D]
-    __repr__ = _data_repr
-
-
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True, repr=False, kw_only=True)
 class RandomEffect:
-    W: Tensor  # [*batch, N, 1, levels]
-    B: Tensor  # [*batch, N, T, q]
-    b: Tensor  # [*batch, levels, q, K]
+    W: Float[Tensor, "*batch n 1 levels"]
+    B: Float[Tensor, "*batch n t q"]
+    b: Float[Tensor, "*batch levels q k"]
     __repr__ = _data_repr
 
 
-@dataclass(frozen=True, repr=False)
-class PredictorData(CovariateData):
-    eta: Tensor  # [*draws, N, T, K]
-    beta: Tensor  # [*batch, p, K]
-    tokens: Tensor | None = None  # [N, T]
-    token_weight: Tensor | None = None  # [*batch, K_in, vocab_size]
+@dataclass(frozen=True, repr=False, kw_only=True)
+class PredictorData:
+    X: Float[Tensor, "*D n t p"]
+    points: Float[Tensor, "*D n t 1"]
+    eta: Float[Tensor, "*D n t k"]
+    beta: Float[Tensor, "*D p k"]
+    tokens: Tensor | None = None
+    token_weight: Tensor | None = None
     random_effect: tuple[RandomEffect, ...] = ()
-    projection_weight: tuple[Tensor, ...] = ()
+    __repr__ = _data_repr
 
 
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True, repr=False, kw_only=True)
 class ResponseData(PredictorData):
-    y: Tensor = field(default_factory=Tensor)  # [N, T, K]
+    y: Float[Tensor, "*D n t k"]
 
 
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True, repr=False, kw_only=True)
 class EventTimeData(ResponseData):
-    event_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
-    censor_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
+    event_time: Float[Tensor, "*D n t k"]
+    censor_time: Float[Tensor, "*D n t 1"]
 
 
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True, repr=False, kw_only=True)
 class SurvivalData(EventTimeData):
-    indicator: Tensor = field(default_factory=Tensor)  # [N, T, K]
-    observed_time: Tensor = field(default_factory=Tensor)  # [N, T, K]
-    time_to_event: Tensor = field(default_factory=Tensor)  # [N, T, K]
+    indicator: Float[Tensor, "*D n t k"]
+    observed_time: Float[Tensor, "*D n t k"]
+    time_to_event: Float[Tensor, "*D n t k"]
 
 
-@dataclass(frozen=True, repr=False)
+@dataclass(frozen=True, repr=False, kw_only=True)
 class DiscreteSurvivalData(SurvivalData):
-    discrete_event_time: Tensor = field(default_factory=Tensor)  # [N, T, K, J]
+    discrete_event_time: Float[Tensor, "*D n t k j"]
 
 
 def promote[T](cls: type[T], parent: object, **fields: object) -> T:

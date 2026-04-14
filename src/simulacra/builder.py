@@ -3,6 +3,7 @@ from typing import Any, Final, NoReturn, Self
 
 import torch
 import torch.distributions as dist
+from jaxtyping import Float
 from torch import Tensor
 
 from .family import (
@@ -22,7 +23,6 @@ from .family import (
 from .graph import Graph, build_graph, guide, step
 from .pipeline import Pipeline, label
 from .states import (
-    CovariateData,
     DiscreteSurvivalData,
     EventTimeData,
     PredictorData,
@@ -35,14 +35,11 @@ from .transforms import (
     activation,
     constant_y,
     fixed_effects,
-    min_max_scale,
     missing_x,
     missing_y,
-    projection,
     random_effects,
     resolve,
     tokenize,
-    z_score,
 )
 
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
@@ -72,86 +69,29 @@ class _Pipeline[S]:
         return self._pipeline.run(batch)
 
 
-class Simulation(_Pipeline[CovariateData]):
-    @step
-    def z_score(self) -> Simulation:
-        return self._step(Simulation, z_score)
-
-    @step
-    def min_max_scale(self, low: float = 0.0, high: float = 1.0) -> Simulation:
-        return self._step(Simulation, min_max_scale, low=low, high=high)
-
-    @step
-    def fixed_effects(self, k: int = 1, beta: Prior = UNIT_NORMAL) -> Predictor:
-        return self._step(Predictor, fixed_effects, k=k, beta=beta)
-
-
-def _effective_shape(prior: Prior) -> tuple[int, ...]:
-    match prior:
-        case Tensor():
-            return tuple(prior.shape)
-        case dist.Distribution():
-            return tuple(prior.batch_shape) + tuple(prior.event_shape)
-
-
-def _check_axis(prior: Prior, axis: int, expected: int, param: str, name: str) -> None:
-    shape = _effective_shape(prior)
-    if -axis > len(shape):
-        return
-    observed = shape[axis]
-    if observed != 1 and observed != expected:
-        raise ValueError(
-            f"{name} prior shape {shape} has size {observed} at axis {axis}, "
-            f"expected {param}={expected} (or 1 to broadcast)."
-        )
-
-
-def _resolve_dim(
-    explicit: int | None, sources: tuple[tuple[Prior, int], ...], default: int
-) -> int:
-    if explicit is not None:
-        return explicit
-    candidates = {
-        _effective_shape(prior)[axis]
-        for prior, axis in sources
-        if -axis <= len(_effective_shape(prior)) and _effective_shape(prior)[axis] != 1
-    }
-    if len(candidates) > 1:
-        raise ValueError(f"priors disagree on size: {sorted(candidates)}")
-    return next(iter(candidates), default)
+def _materialize(prior: Prior, shape: tuple[int, ...]) -> Tensor:
+    return prior.expand(shape) if isinstance(prior, Tensor) else resolve(prior, shape)
 
 
 def simulate(
-    n: int | None = None,
-    t: int | None = None,
-    p: int | None = None,
-    X: Prior = UNIT_NORMAL,
-    points: Prior = EXP1,
-) -> Simulation:
-    t_axis = -1 if isinstance(points, Tensor) and points.ndim == 1 else -2
-    n = _resolve_dim(n, ((X, -3),), default=1)
-    t = _resolve_dim(t, ((X, -2), (points, t_axis)), default=1)
-    p = _resolve_dim(p, ((X, -1),), default=1)
-    _check_axis(X, -3, n, "n", "X")
-    _check_axis(X, -2, t, "t", "X")
-    _check_axis(X, -1, p, "p", "X")
-    _check_axis(points, t_axis, t, "t", "points")
+    X: Float[Tensor, "*D n t p"], beta: Prior = UNIT_NORMAL, *, points: Prior = EXP1
+) -> Predictor:
+    *_, n, t, p = X.shape
+    k = beta.shape[-1] if isinstance(beta, Tensor) else 1
 
-    def run(draws: tuple[int, ...]) -> CovariateData:
-        basis = resolve(X, (*draws, n, t, p))
-        match points:
-            case Tensor():
-                pts = points
-                if pts.ndim == 1:
-                    pts = pts.unsqueeze(-1)
-                pts = pts.expand_as(basis[..., :1])
-            case dist.Distribution():
-                increments = resolve(points, (*draws, n, t))
-                pts = increments.cumsum(dim=-1).unsqueeze(-1)
-        return CovariateData(X=basis, points=pts)
+    def run(draws: tuple[int, ...]) -> PredictorData:
+        batch = (*draws, *X.shape[:-3])
+        x = X.expand(*batch, n, t, p)
+        coefficient = _materialize(beta, (*batch, p, k))
+        if isinstance(points, Tensor):
+            pts = points.expand(*batch, n, t, 1)
+        else:
+            increments = resolve(points, (*batch, n, t))
+            pts = increments.cumsum(dim=-1).unsqueeze(-1)
+        return fixed_effects(X=x, beta=coefficient, points=pts)
 
-    return Simulation(
-        Pipeline(run=run, recipe=(label(simulate, n=n, t=t, p=p, X=X, points=points),))
+    return Predictor(
+        Pipeline(run=run, recipe=(label(simulate, X=X, beta=beta, points=points),))
     )
 
 
@@ -214,10 +154,6 @@ class Predictor(_Pipeline[PredictorData]):
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
         return self._step(Predictor, activation, fn=fn)
-
-    @step
-    def projection(self, output: int, weight: Prior = UNIT_NORMAL) -> Predictor:
-        return self._step(Predictor, projection, output=output, weight=weight)
 
     @step
     def tokenize(
@@ -284,7 +220,6 @@ class Predictor(_Pipeline[PredictorData]):
 
 
 GRAPH: Final[Graph] = build_graph(
-    Simulation,
     Predictor,
     Response,
     PositiveSupportResponse,

@@ -5,7 +5,11 @@ description = "Data simulation for machine learning and statistics."
 readme = "README.md"
 authors = [{ name = "Elliot Hill", email = "elliot.douglas.hill@gmail.com" }]
 requires-python = ">=3.14"
-dependencies = ["beartype>=0.22.9", "torch>=2.11.0"]
+dependencies = [
+    "beartype>=0.22.9",
+    "jaxtyping>=0.3.9",
+    "torch>=2.11.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.10.9,<0.11.0"]
@@ -27,6 +31,12 @@ strict = ["src", "tests"]
 
 [tool.ruff.format]
 skip-magic-trailing-comma = true
+
+[tool.ruff.lint]
+ignore = ["F722"]  # jaxtyping shape strings parse as forward refs
+
+[tool.ruff.lint.per-file-ignores]
+"src/simulacra/__init__.py" = ["E402"]  # install_import_hook must run between imports
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false

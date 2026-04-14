@@ -1,4 +1,5 @@
 import pytest
+import torch
 
 from simulacra import (
     GRAPH,
@@ -7,7 +8,6 @@ from simulacra import (
     PositiveSupportResponse,
     Predictor,
     Response,
-    Simulation,
     Survival,
     simulate,
 )
@@ -18,7 +18,6 @@ ALL_STATES: set[type] = {
     PositiveSupportResponse,
     Predictor,
     Response,
-    Simulation,
     Survival,
 }
 
@@ -27,16 +26,10 @@ def test_graph_contains_all_concrete_classes() -> None:
     assert GRAPH.states() == ALL_STATES
 
 
-def test_simulation_transitions() -> None:
-    expected = {"z_score", "min_max_scale", "fixed_effects"}
-    assert GRAPH.methods_on(Simulation) == expected
-
-
 def test_predictor_transitions() -> None:
     expected = {
         "random_effects",
         "activation",
-        "projection",
         "tokenize",
         "gaussian",
         "poisson",
@@ -80,16 +73,9 @@ def test_discrete_survival_transitions() -> None:
 
 
 def test_same_type_transitions_are_self() -> None:
-    """Same-type transitions are stored as None regardless of annotation."""
-    simulation_transitions = {
-        (t.method, t.target) for t in GRAPH.from_state(Simulation)
-    }
-    assert ("z_score", None) in simulation_transitions
-    assert ("min_max_scale", None) in simulation_transitions
     predictor_targets = {t.method: t.target for t in GRAPH.from_state(Predictor)}
     assert predictor_targets["random_effects"] is None
     assert predictor_targets["activation"] is None
-    assert predictor_targets["projection"] is None
     assert predictor_targets["tokenize"] is None
 
 
@@ -118,8 +104,8 @@ def test_private_methods_not_in_graph() -> None:
 
 
 def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, k = dims
-    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
+    N, T, p, _ = dims
+    resp = simulate(torch.randn(N, T, p)).gaussian()
     with pytest.raises(
         AttributeError,
         match=r"Response has no method censor\(\).*CompetingResponse.*PositiveSupportResponse",
@@ -128,31 +114,24 @@ def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_survival_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, k = dims
-    surv = simulate(N, T, p).fixed_effects(k=k).weibull().censor(horizon=2.0)
+    N, T, p, _ = dims
+    surv = simulate(torch.randn(N, T, p)).weibull().censor(horizon=2.0)
     with pytest.raises(
         AttributeError, match=r"Survival has no method gaussian\(\).*Predictor"
     ):
         surv.gaussian()  # type: ignore[attr-defined]
 
 
-def test_simulation_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, _ = dims
-    sim = simulate(N, T, p)
-    with pytest.raises(AttributeError, match=r"Simulation has no method gaussian\(\)"):
-        sim.gaussian()  # type: ignore[attr-defined]
-
-
 def test_unknown_method_no_guidance(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, k = dims
-    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
+    N, T, p, _ = dims
+    resp = simulate(torch.randn(N, T, p)).gaussian()
     with pytest.raises(AttributeError, match="^foobar$"):
         resp.foobar()  # type: ignore[attr-defined]
 
 
 def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, k = dims
-    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
+    N, T, p, _ = dims
+    resp = simulate(torch.randn(N, T, p)).gaussian()
     assert not hasattr(resp, "censor")
     assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "discretize")
@@ -160,7 +139,7 @@ def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_valid_method_still_works(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, k = dims
-    resp = simulate(N, T, p).fixed_effects(k=k).gaussian()
+    N, T, p, _ = dims
+    resp = simulate(torch.randn(N, T, p)).gaussian()
     resp_with_missing = resp.missing_y(0.1)
     assert type(resp_with_missing).__name__ == "Response"

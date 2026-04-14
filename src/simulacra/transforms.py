@@ -4,9 +4,10 @@ from dataclasses import replace
 import torch
 import torch.distributions as dist
 import torch.nn.functional as F
+from jaxtyping import Float
 from torch import Tensor
 
-from .states import CovariateData, PredictorData, Prior, RandomEffect, ResponseData
+from .states import PredictorData, Prior, RandomEffect, ResponseData
 
 
 def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
@@ -19,13 +20,13 @@ def resolve(prior: Prior, shape: tuple[int, ...] = ()) -> Tensor:
     )
 
 
-def fixed_effects(data: CovariateData, k: int, beta: Prior) -> PredictorData:
-    *batch, _, _, p = data.X.shape
-    coefficient = resolve(beta, (*batch, 1, p, k))
-    eta = data.X @ coefficient
-    return PredictorData(
-        X=data.X, points=data.points, eta=eta, beta=coefficient.squeeze(-3)
-    )
+def fixed_effects(
+    X: Float[Tensor, "*D n t p"],
+    beta: Float[Tensor, "*D p k"],
+    points: Float[Tensor, "*D n t 1"],
+) -> PredictorData:
+    eta = X @ beta.unsqueeze(-3)
+    return PredictorData(X=X, points=points, eta=eta, beta=beta)
 
 
 def random_effects(
@@ -51,7 +52,7 @@ def random_effects(
     )
 
 
-def missing_x[S: CovariateData](data: S, proportion: float) -> S:
+def missing_x[S: PredictorData](data: S, proportion: float) -> S:
     mask = torch.rand_like(data.X) < proportion
     return replace(data, X=data.X.masked_fill(mask, float("nan")))
 
@@ -65,32 +66,8 @@ def constant_y[S: ResponseData](data: S) -> S:
     return replace(data, y=data.y[..., :1, :].expand_as(data.y))
 
 
-def min_max_scale[S: CovariateData](data: S, low: float = 0.0, high: float = 1.0) -> S:
-    data_low = data.X.amin(dim=(-3, -2), keepdim=True)
-    data_high = data.X.amax(dim=(-3, -2), keepdim=True)
-    span = (data_high - data_low).clamp(min=1e-8)
-    scaled = low + (data.X - data_low) / span * (high - low)
-    return replace(data, X=scaled)
-
-
-def z_score[S: CovariateData](data: S) -> S:
-    mean = data.X.mean(dim=(-3, -2), keepdim=True)
-    std = data.X.std(dim=(-3, -2), keepdim=True).clamp(min=1e-8)
-    return replace(data, X=(data.X - mean) / std)
-
-
 def activation(data: PredictorData, fn: Callable[[Tensor], Tensor]) -> PredictorData:
     return replace(data, eta=fn(data.eta))
-
-
-def projection(data: PredictorData, output: int, weight: Prior) -> PredictorData:
-    *batch, _, _, k_in = data.eta.shape
-    w = resolve(weight, (*batch, 1, k_in, output))
-    return replace(
-        data,
-        eta=data.eta @ w,
-        projection_weight=(*data.projection_weight, w.squeeze(-3)),
-    )
 
 
 def tokenize[S: PredictorData](
