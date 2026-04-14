@@ -86,9 +86,57 @@ class Simulation(_Pipeline[CovariateData]):
         return self._step(Predictor, fixed_effects, k=k, beta=beta)
 
 
+def _effective_shape(prior: Prior) -> tuple[int, ...]:
+    match prior:
+        case Tensor():
+            return tuple(prior.shape)
+        case dist.Distribution():
+            return tuple(prior.batch_shape) + tuple(prior.event_shape)
+
+
+def _check_axis(prior: Prior, axis: int, expected: int, param: str, name: str) -> None:
+    shape = _effective_shape(prior)
+    if -axis > len(shape):
+        return
+    observed = shape[axis]
+    if observed != 1 and observed != expected:
+        raise ValueError(
+            f"{name} prior shape {shape} has size {observed} at axis {axis}, "
+            f"expected {param}={expected} (or 1 to broadcast)."
+        )
+
+
+def _resolve_dim(
+    explicit: int | None, sources: tuple[tuple[Prior, int], ...], default: int
+) -> int:
+    if explicit is not None:
+        return explicit
+    candidates = {
+        _effective_shape(prior)[axis]
+        for prior, axis in sources
+        if -axis <= len(_effective_shape(prior)) and _effective_shape(prior)[axis] != 1
+    }
+    if len(candidates) > 1:
+        raise ValueError(f"priors disagree on size: {sorted(candidates)}")
+    return next(iter(candidates), default)
+
+
 def simulate(
-    n: int, t: int = 1, p: int = 1, X: Prior = UNIT_NORMAL, points: Prior = EXP1
+    n: int | None = None,
+    t: int | None = None,
+    p: int | None = None,
+    X: Prior = UNIT_NORMAL,
+    points: Prior = EXP1,
 ) -> Simulation:
+    t_axis = -1 if isinstance(points, Tensor) and points.ndim == 1 else -2
+    n = _resolve_dim(n, ((X, -3),), default=1)
+    t = _resolve_dim(t, ((X, -2), (points, t_axis)), default=1)
+    p = _resolve_dim(p, ((X, -1),), default=1)
+    _check_axis(X, -3, n, "n", "X")
+    _check_axis(X, -2, t, "t", "X")
+    _check_axis(X, -1, p, "p", "X")
+    _check_axis(points, t_axis, t, "t", "points")
+
     def run(draws: tuple[int, ...]) -> CovariateData:
         basis = resolve(X, (*draws, n, t, p))
         match points:

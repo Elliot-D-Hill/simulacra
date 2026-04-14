@@ -1,4 +1,6 @@
+import pytest
 import torch
+import torch.distributions as dist
 
 from simulacra import simulate
 
@@ -192,3 +194,190 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
     assert data.event_time.numel() > 0
     assert data.censor_time.numel() > 0
     assert data.beta.numel() > 0
+
+
+def test_points_tensor_mismatch_raises() -> None:
+    """A tensor points with wrong T raises ValueError naming both dims."""
+    with pytest.raises(ValueError, match=r"points.*size 10.*t=5"):
+        simulate(n=4, t=5, p=3, points=torch.zeros(10))
+
+
+def test_points_tensor_2d_mismatch_raises() -> None:
+    """A rank-2+ tensor whose second-to-last axis mismatches t raises."""
+    with pytest.raises(ValueError, match=r"points.*size 4.*t=5"):
+        simulate(n=4, t=5, p=3, points=torch.zeros(4, 1))
+
+
+def test_points_tensor_1d_match_succeeds() -> None:
+    """1-D tensor of length t is accepted and broadcast to (..., t, 1)."""
+    data = (
+        simulate(n=4, t=5, p=3, points=torch.arange(5.0))
+        .fixed_effects(k=2)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.points.shape == (4, 5, 1)
+
+
+def test_points_tensor_2d_match_succeeds() -> None:
+    """Rank-2 tensor of shape (t, 1) is accepted."""
+    grid = torch.arange(5.0).unsqueeze(-1)
+    data = (
+        simulate(n=4, t=5, p=3, points=grid).fixed_effects(k=2).gaussian().draw(seed=0)
+    )
+    assert data.points.shape == (4, 5, 1)
+
+
+def test_points_tensor_leading_batch_dims_match_succeeds() -> None:
+    """A pre-batched grid with leading singleton dims and correct T succeeds."""
+    grid = torch.zeros(1, 5, 1)
+    data = (
+        simulate(n=4, t=5, p=3, points=grid).fixed_effects(k=2).gaussian().draw(seed=0)
+    )
+    assert data.points.shape == (4, 5, 1)
+
+
+def test_points_distribution_default_succeeds() -> None:
+    """Distribution points bypass the Tensor shape check."""
+    data = (
+        simulate(n=4, t=5, p=3, points=dist.Exponential(2.0))
+        .fixed_effects(k=2)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.points.shape == (4, 5, 1)
+
+
+def test_points_validation_fails_at_call_time() -> None:
+    """The ValueError fires at simulate() call, not at draw()."""
+    with pytest.raises(ValueError):
+        simulate(n=4, t=5, p=3, points=torch.zeros(7))
+
+
+def test_X_tensor_wrong_n_raises() -> None:
+    """X tensor with mismatched N axis raises."""
+    with pytest.raises(ValueError, match=r"X.*size 7.*n=4"):
+        simulate(n=4, t=5, p=3, X=torch.zeros(7, 5, 3))
+
+
+def test_X_tensor_wrong_t_raises() -> None:
+    """X tensor with mismatched T axis raises."""
+    with pytest.raises(ValueError, match=r"X.*size 9.*t=5"):
+        simulate(n=4, t=5, p=3, X=torch.zeros(4, 9, 3))
+
+
+def test_X_tensor_wrong_p_raises() -> None:
+    """X tensor with mismatched p axis raises."""
+    with pytest.raises(ValueError, match=r"X.*size 2.*p=3"):
+        simulate(n=4, t=5, p=3, X=torch.zeros(4, 5, 2))
+
+
+def test_X_tensor_full_rank_match_succeeds() -> None:
+    """X tensor with full (n, t, p) shape succeeds."""
+    data = (
+        simulate(n=4, t=5, p=3, X=torch.ones(4, 5, 3))
+        .fixed_effects(k=2)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.X.shape == (4, 5, 3)
+
+
+def test_X_tensor_broadcast_singletons_succeeds() -> None:
+    """X tensor with singleton axes broadcasts cleanly."""
+    data = (
+        simulate(n=4, t=5, p=3, X=torch.ones(1, 5, 1))
+        .fixed_effects(k=2)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.X.shape == (1, 5, 1)
+
+
+def test_X_tensor_upstream_batch_dims_succeed() -> None:
+    """X tensor with extra leading batch dims passes trailing-axis check."""
+    X = torch.ones(2, 4, 5, 3)
+    data = simulate(n=4, t=5, p=3, X=X).fixed_effects(k=2).gaussian().draw(seed=0)
+    assert data.X.shape == (2, 4, 5, 3)
+
+
+def test_X_distribution_wrong_batch_shape_raises() -> None:
+    """A distribution whose batch_shape disagrees with (n, t, p) is caught."""
+    with pytest.raises(ValueError, match=r"X.*size 7.*p=3"):
+        simulate(n=4, t=5, p=3, X=dist.Normal(torch.zeros(7), 1.0))
+
+
+def test_points_distribution_wrong_batch_shape_raises() -> None:
+    """A distribution points whose batch_shape disagrees with t is caught."""
+    with pytest.raises(ValueError, match=r"points.*size 7.*t=5"):
+        simulate(n=4, t=5, p=3, points=dist.Exponential(torch.ones(7, 1)))
+
+
+def test_dim_defaults_are_one_when_all_unspecified() -> None:
+    """simulate() with no args and scalar priors collapses to (1, 1, 1)."""
+    data = simulate().fixed_effects(k=2).gaussian().draw(seed=0)
+    assert data.X.shape == (1, 1, 1)
+
+
+def test_t_inferred_from_1d_points_tensor() -> None:
+    """A 1-D points tensor sets t from its length when t is omitted."""
+    data = (
+        simulate(points=torch.arange(10.0)).fixed_effects(k=2).gaussian().draw(seed=0)
+    )
+    assert data.points.shape == (1, 10, 1)
+
+
+def test_t_inferred_from_2d_points_tensor() -> None:
+    """A rank-2 points tensor of shape (T, 1) sets t from axis -2."""
+    data = (
+        simulate(points=torch.arange(10.0).unsqueeze(-1))
+        .fixed_effects(k=2)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.points.shape == (1, 10, 1)
+
+
+def test_all_dims_inferred_from_X_tensor() -> None:
+    """A full-rank X tensor sets n, t, p simultaneously."""
+    data = simulate(X=torch.ones(4, 5, 3)).fixed_effects(k=2).gaussian().draw(seed=0)
+    assert data.X.shape == (4, 5, 3)
+
+
+def test_t_inference_agrees_across_X_and_points() -> None:
+    """Consistent T across X and points succeeds."""
+    data = (
+        simulate(X=torch.ones(4, 5, 3), points=torch.arange(5.0))
+        .fixed_effects(k=2)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.X.shape == (4, 5, 3)
+    assert data.points.shape == (4, 5, 1)
+
+
+def test_priors_disagree_raises() -> None:
+    """X and points with disagreeing T raise a domain-level ValueError."""
+    with pytest.raises(ValueError, match=r"disagree"):
+        simulate(X=torch.ones(4, 5, 3), points=torch.arange(7.0))
+
+
+def test_explicit_int_overrides_inference() -> None:
+    """Explicit int is honored; disagreement with a prior goes through _check_axis."""
+    with pytest.raises(ValueError, match=r"points.*size 10.*t=5"):
+        simulate(t=5, points=torch.arange(10.0))
+
+
+def test_n_inferred_from_X_with_t_explicit() -> None:
+    """Mixed explicit+inferred dims: X sets n; t explicit."""
+    data = (
+        simulate(t=5, X=torch.ones(4, 5, 3)).fixed_effects(k=2).gaussian().draw(seed=0)
+    )
+    assert data.X.shape == (4, 5, 3)
+
+
+def test_dim_inferred_from_distribution_batch_shape() -> None:
+    """A distribution with non-trivial batch_shape contributes to inference."""
+    X = dist.Normal(torch.zeros(4, 5, 3), 1.0)
+    data = simulate(X=X).fixed_effects(k=2).gaussian().draw(seed=0)
+    assert data.X.shape == (4, 5, 3)
