@@ -1,7 +1,4 @@
-from typing import Final
-
 import torch
-import torch.distributions as dist
 import torch.nn.functional as F
 from torch import Tensor
 
@@ -14,8 +11,6 @@ from .states import (
     promote,
 )
 from .transforms import resolve
-
-EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 
 def competing_risks(data: ResponseData) -> EventTimeData:

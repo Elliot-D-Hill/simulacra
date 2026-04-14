@@ -30,7 +30,7 @@ from .states import (
     ResponseData,
     SurvivalData,
 )
-from .survival import EXP1, censor, competing_risks, discretize
+from .survival import censor, competing_risks, discretize
 from .transforms import (
     activation,
     constant_y,
@@ -47,6 +47,7 @@ from .transforms import (
 
 UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
 UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
+EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 
 class _Pipeline[S]:
