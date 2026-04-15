@@ -6,6 +6,7 @@ import torch.distributions as dist
 from jaxtyping import Float
 from torch import Tensor
 
+from .causal import dose_response, treatment
 from .family import (
     bernoulli,
     beta,
@@ -155,6 +156,23 @@ class Predictor(_Pipeline[PredictorData]):
         self, weight: Float[Tensor, "k vocab_size"], temperature: float | Tensor = 1.0
     ) -> Predictor:
         return self._step(Predictor, tokenize, weight=weight, temperature=temperature)
+
+    @step
+    def treatment(
+        self,
+        tau: Float[Tensor, "J k"] | float | Tensor,
+        gamma: Float[Tensor, "p J"] | None = None,
+    ) -> Predictor:
+        return self._step(Predictor, treatment, tau=tau, gamma=gamma)
+
+    @step
+    def dose_response(
+        self,
+        tau: float | Tensor,
+        gamma: Float[Tensor, "p 1"] | None = None,
+        sigma: float | Tensor = 1.0,
+    ) -> Predictor:
+        return self._step(Predictor, dose_response, tau=tau, gamma=gamma, sigma=sigma)
 
     @step
     def gaussian(self, covariance: Float[Tensor, "k k"] | None = None) -> Response:

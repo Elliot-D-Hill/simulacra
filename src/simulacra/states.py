@@ -44,6 +44,9 @@ class PredictorData:
     beta: Float[Tensor, "p k"]
     tokens: Tensor | None = None
     token_weight: Tensor | None = None
+    treatment: Tensor | None = None
+    propensity: Tensor | None = None
+    gamma: Tensor | None = None
     random_effect: tuple[RandomEffect, ...] = ()
     __repr__ = _data_repr
 

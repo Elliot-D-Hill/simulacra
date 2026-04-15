@@ -31,6 +31,8 @@ def test_predictor_transitions() -> None:
         "random_effects",
         "activation",
         "tokenize",
+        "treatment",
+        "dose_response",
         "gaussian",
         "poisson",
         "bernoulli",

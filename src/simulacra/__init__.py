@@ -2,6 +2,7 @@ from jaxtyping import install_import_hook
 
 install_import_hook(
     [
+        "simulacra.causal",
         "simulacra.family",
         "simulacra.states",
         "simulacra.survival",
