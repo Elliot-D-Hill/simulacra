@@ -56,6 +56,23 @@ def categorical(data: PredictorData) -> ResponseData:
     return promote(ResponseData, data, y=y)
 
 
+def multinomial(data: PredictorData, num_trials: int) -> ResponseData:
+    y = dist.Multinomial(total_count=num_trials, logits=data.eta).sample()
+    return promote(ResponseData, data, y=y)
+
+
+def beta(data: PredictorData, concentration: float | Tensor) -> ResponseData:
+    mean = torch.sigmoid(data.eta)
+    y = dist.Beta(mean * concentration, (1.0 - mean) * concentration).rsample()
+    return promote(ResponseData, data, y=y)
+
+
+def dirichlet(data: PredictorData, concentration: float | Tensor) -> ResponseData:
+    alpha = concentration * torch.softmax(data.eta, dim=-1)
+    y = dist.Dirichlet(alpha).rsample()
+    return promote(ResponseData, data, y=y)
+
+
 def exponential(data: PredictorData) -> ResponseData:
     y = dist.Exponential(data.eta.exp()).rsample()
     return promote(ResponseData, data, y=y)

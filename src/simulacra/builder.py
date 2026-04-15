@@ -8,14 +8,17 @@ from torch import Tensor
 
 from .family import (
     bernoulli,
+    beta,
     binomial,
     categorical,
+    dirichlet,
     exponential,
     gamma,
     gaussian,
     gompertz,
     log_logistic,
     log_normal,
+    multinomial,
     negative_binomial,
     poisson,
     weibull,
@@ -176,6 +179,18 @@ class Predictor(_Pipeline[PredictorData]):
     @step
     def categorical(self) -> Response:
         return self._step(Response, categorical)
+
+    @step
+    def multinomial(self, num_trials: int) -> Response:
+        return self._step(Response, multinomial, num_trials=num_trials)
+
+    @step
+    def beta(self, concentration: float | Tensor) -> Response:
+        return self._step(Response, beta, concentration=concentration)
+
+    @step
+    def dirichlet(self, concentration: float | Tensor) -> Response:
+        return self._step(Response, dirichlet, concentration=concentration)
 
     @step
     def gamma(self, concentration: float | Tensor) -> PositiveSupportResponse:

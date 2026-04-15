@@ -279,6 +279,48 @@ def test_covariance_explicit_scaled_identity(dims: tuple[int, int, int, int]) ->
     assert data.y.shape == (N, T, k)
 
 
+# --- beta / dirichlet / multinomial ---
+
+
+def test_beta_response(dims: tuple[int, int, int, int]) -> None:
+    """Beta samples lie strictly in (0, 1) with shape (N, T, k)."""
+    N, T, p, k = dims
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .beta(concentration=5.0)
+        .draw(seed=0)
+    )
+    assert data.y.shape == (N, T, k)
+    assert (data.y > 0).all()
+    assert (data.y < 1).all()
+
+
+def test_dirichlet_response(dims: tuple[int, int, int, int]) -> None:
+    """Dirichlet samples lie on the simplex with shape (N, T, k)."""
+    N, T, p, k = dims
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .dirichlet(concentration=5.0)
+        .draw(seed=0)
+    )
+    assert data.y.shape == (N, T, k)
+    assert (data.y > 0).all()
+    assert torch.allclose(data.y.sum(-1), torch.ones(N, T))
+
+
+def test_multinomial_response(dims: tuple[int, int, int, int]) -> None:
+    """Multinomial samples sum to num_trials with shape (N, T, k)."""
+    N, T, p, k = dims
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .multinomial(num_trials=7)
+        .draw(seed=0)
+    )
+    assert data.y.shape == (N, T, k)
+    assert (data.y >= 0).all()
+    assert data.y.sum(-1).eq(7).all()
+
+
 # --- constant y ---
 
 
