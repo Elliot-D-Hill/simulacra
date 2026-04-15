@@ -27,12 +27,12 @@ def censor(
     horizon: float | Tensor = torch.inf,
 ) -> SurvivalData:
     event_time = getattr(data, "event_time", data.y)
-    prior_censor = getattr(data, "censor_time", torch.tensor(torch.inf))
+    censor_time = getattr(data, "censor_time", torch.tensor(torch.inf))
     if dropout is None:
         n, t, _ = event_time.shape[-3:]
         dropout = dist.Exponential(1.0).sample((n, t, 1))
-    rolling = data.points + horizon  # [N, T, 1]
-    censor_time = torch.minimum(torch.minimum(prior_censor, dropout), rolling)
+    rolling_horizon = data.points + horizon  # [N, T, 1]
+    censor_time = torch.minimum(torch.minimum(censor_time, dropout), rolling_horizon)
     observed_time = torch.minimum(event_time, censor_time)
     indicator = (event_time < censor_time).to(event_time.dtype)
     time_to_event = observed_time - data.points
