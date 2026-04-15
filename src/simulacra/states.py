@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields
+from dataclasses import MISSING, dataclass, fields
 from typing import cast
 
 from jaxtyping import Float
@@ -22,6 +22,7 @@ def _data_repr(self: object) -> str:
     parts = [
         f"    {f.name}: {_format_field(getattr(self, f.name))}"
         for f in fields(self)  # type: ignore[arg-type]
+        if f.default is MISSING or getattr(self, f.name) is not f.default
     ]
     body = "\n".join(parts)
     return f"{type(self).__name__}(\n{body}\n)"

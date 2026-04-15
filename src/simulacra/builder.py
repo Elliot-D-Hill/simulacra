@@ -78,8 +78,13 @@ def simulate(
         pts = _default_points(n, t) if points is None else points
         return fixed_effects(X=X, beta=coefficients, points=pts)
 
+    beta_label = beta if beta is not None else (p, 1)
+    points_label = points if points is not None else (n, t, 1)
     return Predictor(
-        Pipeline(run=run, recipe=(label(simulate, X=X, beta=beta, points=points),))
+        Pipeline(
+            run=run,
+            recipe=(label(simulate, X=X, beta=beta_label, points=points_label),),
+        )
     )
 
 

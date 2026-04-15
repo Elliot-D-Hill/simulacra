@@ -16,6 +16,8 @@ def _format(v: object) -> str:
             return f"tensor({v.item():.4g})"
         case Tensor():
             return f"Tensor{tuple(v.shape)}"
+        case tuple():
+            return f"Tensor{v}"
         case partial():
             return label(v.func, **v.keywords)
         case _:
@@ -23,7 +25,7 @@ def _format(v: object) -> str:
 
 
 def label(transform: Callable[..., object], **kwargs: object) -> str:
-    parts = [f"{k}={_format(v)}" for k, v in kwargs.items()]
+    parts = [f"{k}={_format(v)}" for k, v in kwargs.items() if v is not None]
     single = f"{transform.__name__}({', '.join(parts)})"
     if len(single) <= _WIDTH:
         return single
