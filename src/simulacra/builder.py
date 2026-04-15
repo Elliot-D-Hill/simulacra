@@ -63,7 +63,7 @@ class _Pipeline[S]:
 
 
 def _default_points(n: int, t: int) -> Tensor:
-    return dist.Exponential(1.0).sample((n, t)).cumsum(dim=-1).unsqueeze(-1)
+    return dist.Exponential(1.0).sample((n, t, 1)).cumsum(dim=-2)
 
 
 def simulate(
@@ -74,9 +74,9 @@ def simulate(
     n, t, p = X.shape
 
     def run() -> PredictorData:
-        coef = torch.randn(p, 1) if beta is None else beta
+        coefficients = torch.randn(p, 1) if beta is None else beta
         pts = _default_points(n, t) if points is None else points
-        return fixed_effects(X=X, beta=coef, points=pts)
+        return fixed_effects(X=X, beta=coefficients, points=pts)
 
     return Predictor(
         Pipeline(run=run, recipe=(label(simulate, X=X, beta=beta, points=points),))
