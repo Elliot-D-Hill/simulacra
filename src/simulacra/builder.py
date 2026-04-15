@@ -144,18 +144,9 @@ class Predictor(_Pipeline[PredictorData]):
 
     @step
     def tokenize(
-        self,
-        vocab_size: int,
-        weight: Float[Tensor, "k vocab_size"] | None = None,
-        temperature: float | Tensor = 1.0,
+        self, weight: Float[Tensor, "k vocab_size"], temperature: float | Tensor = 1.0
     ) -> Predictor:
-        return self._step(
-            Predictor,
-            tokenize,
-            vocab_size=vocab_size,
-            weight=weight,
-            temperature=temperature,
-        )
+        return self._step(Predictor, tokenize, weight=weight, temperature=temperature)
 
     @step
     def gaussian(self, covariance: Float[Tensor, "k k"] | None = None) -> Response:

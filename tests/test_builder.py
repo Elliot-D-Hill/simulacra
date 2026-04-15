@@ -135,7 +135,7 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     data = (
         simulate(torch.randn(N, T, p), torch.randn(p, k))
-        .tokenize(vocab_size=50)
+        .tokenize(weight=torch.randn(k, 50))
         .weibull(shape=1.5)
         .censor(horizon=3.0)
         .missing_x(0.2)
