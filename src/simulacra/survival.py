@@ -31,11 +31,11 @@ def censor(
     if dropout is None:
         n, t, _ = event_time.shape[-3:]
         dropout = dist.Exponential(1.0).sample((n, t, 1))
-    rolling = data.points[..., :1] + horizon  # [N, T, 1]
+    rolling = data.points + horizon  # [N, T, 1]
     censor_time = torch.minimum(torch.minimum(prior_censor, dropout), rolling)
     observed_time = torch.minimum(event_time, censor_time)
     indicator = (event_time < censor_time).to(event_time.dtype)
-    time_to_event = observed_time - data.points[..., :1]
+    time_to_event = observed_time - data.points
     return promote(
         SurvivalData,
         data,
