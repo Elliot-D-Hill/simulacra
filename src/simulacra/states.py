@@ -1,11 +1,8 @@
 from dataclasses import dataclass, fields
 from typing import cast
 
-import torch.distributions as dist
 from jaxtyping import Float
 from torch import Tensor
-
-type Prior = dist.Distribution | Tensor
 
 
 def _format_field(val: object) -> str:
@@ -32,18 +29,18 @@ def _data_repr(self: object) -> str:
 
 @dataclass(frozen=True, repr=False, kw_only=True)
 class RandomEffect:
-    W: Float[Tensor, "*batch n 1 levels"]
-    B: Float[Tensor, "*batch n t q"]
-    b: Float[Tensor, "*batch levels q k"]
+    W: Float[Tensor, "n t levels"]
+    B: Float[Tensor, "n t q"]
+    b: Float[Tensor, "levels q k"]
     __repr__ = _data_repr
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)
 class PredictorData:
-    X: Float[Tensor, "*D n t p"]
-    points: Float[Tensor, "*D n t 1"]
-    eta: Float[Tensor, "*D n t k"]
-    beta: Float[Tensor, "*D p k"]
+    X: Float[Tensor, "n t p"]
+    points: Float[Tensor, "n t 1"]
+    eta: Float[Tensor, "n t k"]
+    beta: Float[Tensor, "p k"]
     tokens: Tensor | None = None
     token_weight: Tensor | None = None
     random_effect: tuple[RandomEffect, ...] = ()
@@ -52,25 +49,25 @@ class PredictorData:
 
 @dataclass(frozen=True, repr=False, kw_only=True)
 class ResponseData(PredictorData):
-    y: Float[Tensor, "*D n t k"]
+    y: Float[Tensor, "n t k"]
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)
 class EventTimeData(ResponseData):
-    event_time: Float[Tensor, "*D n t k"]
-    censor_time: Float[Tensor, "*D n t 1"]
+    event_time: Float[Tensor, "n t k"]
+    censor_time: Float[Tensor, "n t 1"]
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)
 class SurvivalData(EventTimeData):
-    indicator: Float[Tensor, "*D n t k"]
-    observed_time: Float[Tensor, "*D n t k"]
-    time_to_event: Float[Tensor, "*D n t k"]
+    indicator: Float[Tensor, "n t k"]
+    observed_time: Float[Tensor, "n t k"]
+    time_to_event: Float[Tensor, "n t k"]
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)
 class DiscreteSurvivalData(SurvivalData):
-    discrete_event_time: Float[Tensor, "*D n t k j"]
+    discrete_event_time: Float[Tensor, "n t k j"]
 
 
 def promote[T](cls: type[T], parent: object, **fields: object) -> T:

@@ -1,69 +1,69 @@
 import torch
 import torch.distributions as dist
+from jaxtyping import Float
 from torch import Tensor
 
-from .states import PredictorData, Prior, ResponseData, promote
 from .pipeline import Step
-from .transforms import resolve
+from .states import PredictorData, ResponseData, promote
 
 type Family = Step[PredictorData, ResponseData]
 
 
-def gaussian(data: PredictorData, covariance: Prior) -> ResponseData:
-    K = data.eta.shape[-1]
-    covariance = resolve(covariance, (K, K))
-    if covariance.ndim < 2:
-        covariance = covariance * torch.eye(K)
-    y = resolve(dist.MultivariateNormal(data.eta, covariance))
+def gaussian(
+    data: PredictorData, covariance: Float[Tensor, "k k"] | None = None
+) -> ResponseData:
+    k = data.eta.shape[-1]
+    cov = torch.eye(k) if covariance is None else covariance
+    d = dist.MultivariateNormal(data.eta, cov)
+    y = d.rsample()
     return promote(ResponseData, data, y=y)
 
 
 def poisson(data: PredictorData) -> ResponseData:
-    y = resolve(dist.Poisson(data.eta.exp()))
+    y = dist.Poisson(data.eta.exp()).sample()
     return promote(ResponseData, data, y=y)
 
 
 def bernoulli(data: PredictorData) -> ResponseData:
-    y = resolve(dist.Binomial(total_count=1, logits=data.eta))
+    y = dist.Binomial(total_count=1, logits=data.eta).sample()
     return promote(ResponseData, data, y=y)
 
 
 def binomial(data: PredictorData, num_trials: int) -> ResponseData:
-    y = resolve(dist.Binomial(total_count=num_trials, logits=data.eta))
+    y = dist.Binomial(total_count=num_trials, logits=data.eta).sample()
     return promote(ResponseData, data, y=y)
 
 
 def negative_binomial(
     data: PredictorData, concentration: float | Tensor
 ) -> ResponseData:
-    y = resolve(dist.NegativeBinomial(concentration, logits=data.eta))
+    y = dist.NegativeBinomial(concentration, logits=data.eta).sample()
     return promote(ResponseData, data, y=y)
 
 
 def gamma(data: PredictorData, concentration: float | Tensor) -> ResponseData:
-    y = resolve(dist.Gamma(concentration, data.eta.exp().reciprocal()))
+    y = dist.Gamma(concentration, data.eta.exp().reciprocal()).rsample()
     return promote(ResponseData, data, y=y)
 
 
 def log_normal(data: PredictorData, std: float | Tensor) -> ResponseData:
-    y = resolve(dist.LogNormal(data.eta, std))
+    y = dist.LogNormal(data.eta, std).rsample()
     return promote(ResponseData, data, y=y)
 
 
 def categorical(data: PredictorData) -> ResponseData:
-    y = resolve(dist.Multinomial(total_count=1, logits=data.eta))
+    y = dist.Multinomial(total_count=1, logits=data.eta).sample()
     return promote(ResponseData, data, y=y)
 
 
 def exponential(data: PredictorData) -> ResponseData:
-    rate = data.eta.exp()
-    y = resolve(dist.Exponential(rate))
+    y = dist.Exponential(data.eta.exp()).rsample()
     return promote(ResponseData, data, y=y)
 
 
 def weibull(data: PredictorData, shape: float | Tensor) -> ResponseData:
     scale = data.eta.exp().reciprocal()
-    y = resolve(dist.Weibull(scale, shape))
+    y = dist.Weibull(scale, shape).rsample()
     return promote(ResponseData, data, y=y)
 
 

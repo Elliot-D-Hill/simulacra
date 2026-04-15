@@ -104,8 +104,8 @@ def test_private_methods_not_in_graph() -> None:
 
 
 def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, _ = dims
-    resp = simulate(torch.randn(N, T, p)).gaussian()
+    N, T, p, k = dims
+    resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
     with pytest.raises(
         AttributeError,
         match=r"Response has no method censor\(\).*CompetingResponse.*PositiveSupportResponse",
@@ -114,8 +114,10 @@ def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_survival_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, _ = dims
-    surv = simulate(torch.randn(N, T, p)).weibull().censor(horizon=2.0)
+    N, T, p, k = dims
+    surv = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k)).weibull().censor(horizon=2.0)
+    )
     with pytest.raises(
         AttributeError, match=r"Survival has no method gaussian\(\).*Predictor"
     ):
@@ -123,15 +125,15 @@ def test_survival_gaussian_guides(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_unknown_method_no_guidance(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, _ = dims
-    resp = simulate(torch.randn(N, T, p)).gaussian()
+    N, T, p, k = dims
+    resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
     with pytest.raises(AttributeError, match="^foobar$"):
         resp.foobar()  # type: ignore[attr-defined]
 
 
 def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, _ = dims
-    resp = simulate(torch.randn(N, T, p)).gaussian()
+    N, T, p, k = dims
+    resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
     assert not hasattr(resp, "censor")
     assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "discretize")
@@ -139,7 +141,7 @@ def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
 
 
 def test_valid_method_still_works(dims: tuple[int, int, int, int]) -> None:
-    N, T, p, _ = dims
-    resp = simulate(torch.randn(N, T, p)).gaussian()
+    N, T, p, k = dims
+    resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
     resp_with_missing = resp.missing_y(0.1)
     assert type(resp_with_missing).__name__ == "Response"

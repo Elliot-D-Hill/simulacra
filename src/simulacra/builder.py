@@ -26,7 +26,6 @@ from .states import (
     DiscreteSurvivalData,
     EventTimeData,
     PredictorData,
-    Prior,
     ResponseData,
     SurvivalData,
 )
@@ -38,13 +37,8 @@ from .transforms import (
     missing_x,
     missing_y,
     random_effects,
-    resolve,
     tokenize,
 )
-
-UNIT_VARIANCE: Final[Tensor] = torch.tensor(1.0)
-UNIT_NORMAL: Final[dist.Normal] = dist.Normal(0.0, UNIT_VARIANCE)
-EXP1: Final[dist.Exponential] = dist.Exponential(1.0)
 
 
 class _Pipeline[S]:
@@ -62,33 +56,27 @@ class _Pipeline[S]:
     ) -> B:
         return cls(self._pipeline.apply(transform, **kwargs))
 
-    def draw(self, draws: int | None = None, seed: int | None = None) -> S:
+    def draw(self, seed: int | None = None) -> S:
         if seed is not None:
             torch.manual_seed(seed)  # type: ignore[no-untyped-call]
-        batch = (draws,) if draws is not None else ()
-        return self._pipeline.run(batch)
+        return self._pipeline.run()
 
 
-def _materialize(prior: Prior, shape: tuple[int, ...]) -> Tensor:
-    return prior.expand(shape) if isinstance(prior, Tensor) else resolve(prior, shape)
+def _default_points(n: int, t: int) -> Tensor:
+    return dist.Exponential(1.0).sample((n, t)).cumsum(dim=-1).unsqueeze(-1)
 
 
 def simulate(
-    X: Float[Tensor, "*D n t p"], beta: Prior = UNIT_NORMAL, *, points: Prior = EXP1
+    X: Float[Tensor, "n t p"],
+    beta: Float[Tensor, "p k"] | None = None,
+    points: Float[Tensor, "n t 1"] | None = None,
 ) -> Predictor:
-    *_, n, t, p = X.shape
-    k = beta.shape[-1] if isinstance(beta, Tensor) else 1
+    n, t, p = X.shape
 
-    def run(draws: tuple[int, ...]) -> PredictorData:
-        batch = (*draws, *X.shape[:-3])
-        x = X.expand(*batch, n, t, p)
-        coefficient = _materialize(beta, (*batch, p, k))
-        if isinstance(points, Tensor):
-            pts = points.expand(*batch, n, t, 1)
-        else:
-            increments = resolve(points, (*batch, n, t))
-            pts = increments.cumsum(dim=-1).unsqueeze(-1)
-        return fixed_effects(X=x, beta=coefficient, points=pts)
+    def run() -> PredictorData:
+        coef = torch.randn(p, 1) if beta is None else beta
+        pts = _default_points(n, t) if points is None else points
+        return fixed_effects(X=X, beta=coef, points=pts)
 
     return Predictor(
         Pipeline(run=run, recipe=(label(simulate, X=X, beta=beta, points=points),))
@@ -115,7 +103,9 @@ class Response(_ResponsePipeline[ResponseData]): ...
 class _CensorPipeline[S: ResponseData](_ResponsePipeline[S]):
     @step
     def censor(
-        self, dropout: Prior = EXP1, *, horizon: float | Tensor = torch.inf
+        self,
+        dropout: Float[Tensor, "n t 1"] | None = None,
+        horizon: float | Tensor = torch.inf,
     ) -> Survival:
         return self._step(Survival, censor, dropout=dropout, horizon=horizon)
 
@@ -142,14 +132,11 @@ class Predictor(_Pipeline[PredictorData]):
     @step
     def random_effects(
         self,
-        levels: int,
-        q: int = 1,
-        *,
-        W: Prior | None = None,
-        B: Prior = UNIT_NORMAL,
-        b: Prior = UNIT_NORMAL,
+        W: Float[Tensor, "n t levels"],
+        B: Float[Tensor, "n t q"],
+        b: Float[Tensor, "levels q k"] | None = None,
     ) -> Predictor:
-        return self._step(Predictor, random_effects, levels=levels, q=q, W=W, B=B, b=b)
+        return self._step(Predictor, random_effects, W=W, B=B, b=b)
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:
@@ -159,7 +146,7 @@ class Predictor(_Pipeline[PredictorData]):
     def tokenize(
         self,
         vocab_size: int,
-        weight: Prior = UNIT_NORMAL,
+        weight: Float[Tensor, "k vocab_size"] | None = None,
         temperature: float | Tensor = 1.0,
     ) -> Predictor:
         return self._step(
@@ -171,7 +158,7 @@ class Predictor(_Pipeline[PredictorData]):
         )
 
     @step
-    def gaussian(self, covariance: Prior = UNIT_VARIANCE) -> Response:
+    def gaussian(self, covariance: Float[Tensor, "k k"] | None = None) -> Response:
         return self._step(Response, gaussian, covariance=covariance)
 
     @step

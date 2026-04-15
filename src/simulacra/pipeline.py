@@ -5,16 +5,9 @@ from functools import partial
 from torch import Tensor
 
 type Step[S, T] = Callable[[S], T]
-type Run[S] = Step[tuple[int, ...], S]
+type Run[S] = Callable[[], S]
 
 _WIDTH = 88
-
-
-def chain[S, M, T](first: Step[S, M], second: Step[M, T]) -> Step[S, T]:
-    def chained(data: S) -> T:
-        return second(first(data))
-
-    return chained
 
 
 def _format(v: object) -> str:
@@ -44,10 +37,12 @@ class Pipeline[S]:
     recipe: tuple[str, ...]
 
     def apply[T](self, transform: Callable[..., T], **kwargs: object) -> Pipeline[T]:
-        return Pipeline(
-            chain(self.run, partial(transform, **kwargs)),
-            (*self.recipe, label(transform, **kwargs)),
-        )
+        first = self.run
+
+        def composed() -> T:
+            return transform(first(), **kwargs)
+
+        return Pipeline(composed, (*self.recipe, label(transform, **kwargs)))
 
     def __repr__(self) -> str:
         return "\n.".join(self.recipe) or "Pipeline"
