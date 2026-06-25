@@ -8,6 +8,9 @@ from torch import Tensor
 
 from .states import PredictorData, RandomEffect, ResponseData
 
+_linalg = getattr(torch, "linalg")
+_cholesky: Callable[[Tensor], Tensor] = _linalg.cholesky
+
 
 def fixed_effects(
     X: Float[Tensor, "n t p"],
@@ -18,21 +21,30 @@ def fixed_effects(
     return PredictorData(X=X, points=points, eta=eta, beta=beta)
 
 
+def _cholesky_factor(covariance: Tensor | None, size: int) -> Tensor:
+    return torch.eye(size) if covariance is None else _cholesky(covariance)
+
+
 def random_effects(
     data: PredictorData,
     W: Float[Tensor, "n t levels"],
     B: Float[Tensor, "n t q"],
-    b: Float[Tensor, "levels q k"] | None = None,
+    z: Float[Tensor, "levels q k"] | None = None,
+    outcome_covariance: Float[Tensor, "k k"] | None = None,
+    basis_covariance: Float[Tensor, "q q"] | None = None,
 ) -> PredictorData:
     levels = W.shape[-1]
     q = B.shape[-1]
     k = data.eta.shape[-1]
-    coefficient = torch.randn(levels, q, k) if b is None else b
-    eta = torch.einsum("ntl,ntr,lrk->ntk", W, B, coefficient)
+    noise = torch.randn(levels, q, k) if z is None else z
+    chol_basis = _cholesky_factor(basis_covariance, q)
+    chol_outcome = _cholesky_factor(outcome_covariance, k)
+    b = chol_basis @ noise @ chol_outcome.mT
+    eta = torch.einsum("ntl,ntr,lrk->ntk", W, B, b)
     return replace(
         data,
         eta=data.eta + eta,
-        random_effect=(*data.random_effect, RandomEffect(W=W, B=B, b=coefficient)),
+        random_effect=(*data.random_effect, RandomEffect(W=W, B=B, b=b)),
     )
 
 

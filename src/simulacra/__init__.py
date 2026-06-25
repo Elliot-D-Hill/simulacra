@@ -3,6 +3,7 @@ from jaxtyping import install_import_hook
 install_import_hook(
     [
         "simulacra.causal",
+        "simulacra.covariance",
         "simulacra.family",
         "simulacra.states",
         "simulacra.survival",
@@ -21,6 +22,7 @@ from .builder import (
     Survival,
     simulate,
 )
+from .covariance import random_effects_covariance
 from .family import Family
 from .graph import Graph, Transition, build_graph, step
 from .pipeline import Pipeline, Run, Step, label
@@ -57,6 +59,7 @@ __all__ = [
     "build_graph",
     "label",
     "promote",
+    "random_effects_covariance",
     "simulate",
     "step",
 ]

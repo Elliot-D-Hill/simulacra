@@ -143,9 +143,19 @@ class Predictor(_Pipeline[PredictorData]):
         self,
         W: Float[Tensor, "n t levels"],
         B: Float[Tensor, "n t q"],
-        b: Float[Tensor, "levels q k"] | None = None,
+        z: Float[Tensor, "levels q k"] | None = None,
+        outcome_covariance: Float[Tensor, "k k"] | None = None,
+        basis_covariance: Float[Tensor, "q q"] | None = None,
     ) -> Predictor:
-        return self._step(Predictor, random_effects, W=W, B=B, b=b)
+        return self._step(
+            Predictor,
+            random_effects,
+            W=W,
+            B=B,
+            z=z,
+            outcome_covariance=outcome_covariance,
+            basis_covariance=basis_covariance,
+        )
 
     @step
     def activation(self, fn: Callable[[Tensor], Tensor] = torch.relu) -> Predictor:

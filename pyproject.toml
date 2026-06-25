@@ -33,7 +33,7 @@ strict = ["src", "tests"]
 skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
-ignore = ["F722"]  # jaxtyping shape strings parse as forward refs
+ignore = ["F722", "F821"]  # jaxtyping shape strings parse as forward refs
 
 [tool.ruff.lint.per-file-ignores]
 "src/simulacra/__init__.py" = ["E402"]  # install_import_hook must run between imports

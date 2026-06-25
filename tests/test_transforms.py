@@ -1,3 +1,4 @@
+import pytest
 import torch
 import torch.distributions as dist
 import torch.nn.functional as F
@@ -172,10 +173,10 @@ def test_explicit_dirichlet_membership(dims: tuple[int, int, int, int]) -> None:
     L, q = 3, 2
     W = dist.Dirichlet(torch.ones(L)).sample((N, T))
     B = torch.randn(N, T, q)
-    b = torch.randn(L, q, k)
+    z = torch.randn(L, q, k)
     data = (
         simulate(torch.randn(N, T, p), torch.randn(p, k))
-        .random_effects(W=W, B=B, b=b)
+        .random_effects(W=W, B=B, z=z)
         .gaussian()
         .draw(seed=0)
     )
@@ -194,8 +195,8 @@ def test_multiple_random_effects(dims: tuple[int, int, int, int]) -> None:
     W2 = F.one_hot(torch.arange(N) % L2, L2).float().unsqueeze(1).expand(N, T, L2)
     data = (
         simulate(torch.randn(N, T, p), torch.randn(p, k))
-        .random_effects(W=W1, B=torch.randn(N, T, q), b=torch.randn(L, q, k))
-        .random_effects(W=W2, B=torch.randn(N, T, q2), b=torch.randn(L2, q2, k))
+        .random_effects(W=W1, B=torch.randn(N, T, q), z=torch.randn(L, q, k))
+        .random_effects(W=W2, B=torch.randn(N, T, q2), z=torch.randn(L2, q2, k))
         .gaussian()
         .draw(seed=0)
     )
@@ -218,8 +219,8 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
     indices = torch.arange(N) % L
     W = F.one_hot(indices, L).float().unsqueeze(1).expand(N, T, L)  # (N, T, L)
     B = torch.randn(N, T, q)
-    b = torch.randn(L, q, k)
-    eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W, B, b)
+    z = torch.randn(L, q, k)
+    eta_manual = torch.einsum("ntl,ntr,lrk->ntk", W, B, z)
     points = torch.arange(T, dtype=torch.float).reshape(1, T, 1).expand(N, T, 1)
     base_data = PredictorData(
         X=torch.zeros(N, T, p),
@@ -227,8 +228,80 @@ def test_einsum_equivalence(dims: tuple[int, int, int, int]) -> None:
         eta=torch.zeros(N, T, k),
         beta=torch.zeros(p, k),
     )
-    re_data = random_effects(base_data, W, B, b)
+    re_data = random_effects(base_data, W, B, z)
     assert eta_manual.equal(re_data.eta)
+
+
+@pytest.fixture
+def re_base() -> PredictorData:
+    """Zero-filled predictor state with k=2 outcomes for random-effects draws."""
+    return PredictorData(
+        X=torch.zeros(1, 1, 1),
+        points=torch.zeros(1, 1, 1),
+        eta=torch.zeros(1, 1, 2),
+        beta=torch.zeros(1, 2),
+    )
+
+
+def test_random_effects_identity_covariance_matches_iid(re_base: PredictorData) -> None:
+    """No covariance reproduces the iid standard-normal coefficient draw."""
+    L, q, k = 3, 2, 2
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, q)
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    drawn = random_effects(re_base, W, B).random_effect[-1].b
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    expected = torch.randn(L, q, k)
+    assert drawn.equal(expected)
+
+
+def test_random_effects_covariance_recovers_kronecker(re_base: PredictorData) -> None:
+    """Empirical covariance of vec(b) across levels matches Q (x) Sigma_K."""
+    L = 40000
+    basis_covariance = torch.tensor([[2.0, 0.0], [0.0, 0.5]])
+    outcome_covariance = torch.tensor([[1.0, 0.6], [0.6, 1.0]])
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, 2)
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    re = random_effects(
+        re_base,
+        W,
+        B,
+        outcome_covariance=outcome_covariance,
+        basis_covariance=basis_covariance,
+    )
+    empirical = torch.cov(re.random_effect[-1].b.reshape(L, 4).mT)
+    expected = torch.tensor(
+        [
+            [2.0, 1.2, 0.0, 0.0],
+            [1.2, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 0.5, 0.3],
+            [0.0, 0.0, 0.3, 0.5],
+        ]
+    )
+    assert torch.allclose(empirical, expected, atol=0.05)
+
+
+def test_random_effects_outcome_covariance_only(re_base: PredictorData) -> None:
+    """outcome_covariance alone correlates the k outcomes on the right axis."""
+    L = 40000
+    outcome_covariance = torch.tensor([[1.0, 0.6], [0.6, 1.0]])
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, 1)
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    re = random_effects(re_base, W, B, outcome_covariance=outcome_covariance)
+    empirical = torch.cov(re.random_effect[-1].b.reshape(L, 2).mT)
+    assert torch.allclose(empirical, outcome_covariance, atol=0.05)
+
+
+def test_random_effects_colors_explicit_noise(re_base: PredictorData) -> None:
+    """Explicit z is scaled by the covariance: b = z @ chol(outcome).mT."""
+    W = torch.zeros(1, 1, 1)
+    B = torch.zeros(1, 1, 1)
+    z = torch.tensor([[[1.0, 1.0]]])
+    outcome_covariance = torch.tensor([[4.0, 0.0], [0.0, 9.0]])
+    re = random_effects(re_base, W, B, z=z, outcome_covariance=outcome_covariance)
+    assert re.random_effect[-1].b.equal(torch.tensor([[[2.0, 3.0]]]))
 
 
 # --- activation ---
