@@ -304,6 +304,54 @@ def test_random_effects_colors_explicit_noise(re_base: PredictorData) -> None:
     assert re.random_effect[-1].b.equal(torch.tensor([[[2.0, 3.0]]]))
 
 
+def test_random_effects_basis_covariance_only(re_base: PredictorData) -> None:
+    """basis_covariance alone correlates the q basis columns, leaving outcomes iid."""
+    L = 40000
+    basis_covariance = torch.tensor([[1.0, 0.6], [0.6, 1.0]])
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, 2)
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    re = random_effects(re_base, W, B, basis_covariance=basis_covariance)
+    empirical = torch.cov(re.random_effect[-1].b[:, :, 0].mT)
+    assert torch.allclose(empirical, basis_covariance, atol=0.05)
+
+
+def test_random_intercept_constant_over_time(dims: tuple[int, int, int, int]) -> None:
+    """A random intercept (q=1) with no fixed effect is identical across timepoints."""
+    N, T, p, k = dims
+    W = F.one_hot(torch.arange(N), N).float().unsqueeze(1).expand(N, T, N)
+    B = torch.ones(N, T, 1)
+    data = (
+        simulate(torch.randn(N, T, p), torch.zeros(p, k))
+        .random_effects(W=W, B=B)
+        .gaussian()
+        .draw(seed=0)
+    )
+    for i in range(1, T):
+        assert data.eta[:, 0, :].equal(data.eta[:, i, :])
+
+
+def test_ehr_frailty_weibull_sequences() -> None:
+    """Per-patient frailty with correlated causes and per-cause Weibull shapes
+    yields valid event sequences with the frailty recorded."""
+    N, T, p, k = 50, 6, 3, 3
+    W = F.one_hot(torch.arange(N), N).float().unsqueeze(1).expand(N, T, N)
+    B = torch.ones(N, T, 1)
+    outcome_covariance = torch.tensor(
+        [[1.0, 0.4, 0.4], [0.4, 1.0, 0.4], [0.4, 0.4, 1.0]]
+    )
+    shape = torch.tensor([0.5, 1.0, 2.0])
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .random_effects(W=W, B=B, outcome_covariance=outcome_covariance)
+        .weibull(shape=shape)
+        .draw(seed=0)
+    )
+    assert data.y.shape == (N, T, k)
+    assert (data.y > 0).all()
+    assert data.random_effect[-1].b.shape == (N, 1, k)
+
+
 # --- activation ---
 
 
