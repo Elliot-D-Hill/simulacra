@@ -26,8 +26,8 @@ def censor(
     dropout: Float[Tensor, "n t 1"] | None = None,
     horizon: float | Tensor = torch.inf,
 ) -> SurvivalData:
-    event_time = getattr(data, "event_time", data.y)
-    censor_time = getattr(data, "censor_time", torch.tensor(torch.inf))
+    event_time = data.y
+    censor_time = torch.tensor(torch.inf)
     if dropout is None:
         n, t, _ = event_time.shape[-3:]
         dropout = dist.Exponential(1.0).sample((n, t, 1))
