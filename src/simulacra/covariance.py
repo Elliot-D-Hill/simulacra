@@ -81,3 +81,18 @@ def array_normal(
     chol_row = _cholesky_factor(row_covariance, row)
     chol_column = _cholesky_factor(column_covariance, col)
     return chol_row @ noise @ chol_column.mT
+
+
+def sample_features(
+    temporal_covariance: Float[Tensor, "t t"],
+    n: int,
+    p: int,
+    feature_covariance: Float[Tensor, "p p"] | None = None,
+) -> Float[Tensor, "n t p"]:
+    """Draw features X [n, t, p] correlated over time by temporal_covariance, each
+    subject an array-normal draw with Cov(vec X_n) = feature_covariance (x)
+    temporal_covariance. Build the temporal kernel with matern_kernel.
+    """
+    t = temporal_covariance.shape[-1]
+    noise = torch.randn(n, t, p)
+    return array_normal(noise, temporal_covariance, feature_covariance)

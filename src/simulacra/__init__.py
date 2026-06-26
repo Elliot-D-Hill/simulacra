@@ -27,6 +27,7 @@ from .covariance import (
     array_normal,
     matern_kernel,
     random_effects_covariance,
+    sample_features,
 )
 from .family import Family
 from .graph import Graph, Transition, build_graph, step
@@ -68,6 +69,7 @@ __all__ = [
     "matern_kernel",
     "promote",
     "random_effects_covariance",
+    "sample_features",
     "simulate",
     "step",
 ]

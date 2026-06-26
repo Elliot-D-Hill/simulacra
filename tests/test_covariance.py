@@ -6,6 +6,7 @@ from simulacra.covariance import (
     array_normal,
     matern_kernel,
     random_effects_covariance,
+    sample_features,
 )
 
 
@@ -116,3 +117,30 @@ def test_array_normal_colors_both_axes() -> None:
     X = array_normal(noise, row_covariance, column_covariance)
     expected = torch.tensor([[[2.0, 8.0], [3.0, 12.0]]])
     assert X.equal(expected)
+
+
+def test_sample_features_shape_from_matern() -> None:
+    """sample_features draws X [n, t, p]; t comes from the kernel, p is given."""
+    X = sample_features(matern_kernel(torch.tensor([0.0, 1.0, 2.0, 3.0])), n=10, p=3)
+    assert X.shape == (10, 4, 3)
+
+
+def test_sample_features_recovers_kronecker() -> None:
+    """Cov(vec X_n) over the (t, p) axes is feature_covariance (x) temporal_covariance."""
+    n = 40000
+    temporal_covariance = torch.tensor([[2.0, 0.0], [0.0, 0.5]])
+    feature_covariance = torch.tensor([[1.0, 0.6], [0.6, 1.0]])
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    X = sample_features(
+        temporal_covariance, n, p=2, feature_covariance=feature_covariance
+    )
+    empirical = torch.cov(X.reshape(n, 4).mT)
+    expected = torch.tensor(
+        [
+            [2.0, 1.2, 0.0, 0.0],
+            [1.2, 2.0, 0.0, 0.0],
+            [0.0, 0.0, 0.5, 0.3],
+            [0.0, 0.0, 0.3, 0.5],
+        ]
+    )
+    assert torch.allclose(empirical, expected, atol=0.05)
