@@ -4,6 +4,7 @@ import torch.distributions as dist
 import torch.nn.functional as F
 
 from simulacra import PredictorData, simulate
+from simulacra.covariance import MaternOrder, matern_kernel
 from simulacra.transforms import random_effects
 
 # --- custom points ---
@@ -350,6 +351,45 @@ def test_ehr_frailty_weibull_sequences() -> None:
     assert data.y.shape == (N, T, k)
     assert (data.y > 0).all()
     assert data.random_effect[-1].b.shape == (N, 1, k)
+
+
+def test_identity_time_basis_yields_per_timepoint_effect(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """An identity time basis (B = I_T, q = T) routes coefficient column t to
+    timepoint t, so eta equals the coefficients per subject. This is the mechanism
+    that turns a basis_covariance into a temporal covariance over the eta."""
+    N, T, p, k = dims
+    W = F.one_hot(torch.arange(N), N).float().unsqueeze(1).expand(N, T, N)
+    B = torch.eye(T).unsqueeze(0).expand(N, T, T)
+    z = torch.randn(N, T, k)
+    data = (
+        simulate(torch.zeros(N, T, p), torch.zeros(p, k))
+        .random_effects(W=W, B=B, z=z)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.eta.equal(z)
+
+
+def test_matern_basis_covariance_recovers_temporal_kernel() -> None:
+    """basis_covariance = matern_kernel(grid) over an identity time basis gives the
+    coefficients a stationary temporal covariance K_T: the OU dynamic-frailty form."""
+    levels, T, k = 40000, 5, 1
+    grid = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0])
+    K_T = matern_kernel(grid, order=MaternOrder.HALF)
+    base = PredictorData(
+        X=torch.zeros(1, 1, 1),
+        points=torch.zeros(1, 1, 1),
+        eta=torch.zeros(1, 1, k),
+        beta=torch.zeros(1, k),
+    )
+    W = torch.zeros(1, 1, levels)
+    B = torch.zeros(1, 1, T)
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    re = random_effects(base, W, B, basis_covariance=K_T)
+    empirical = torch.cov(re.random_effect[-1].b[:, :, 0].mT)
+    assert torch.allclose(empirical, K_T, atol=0.05)
 
 
 # --- activation ---
