@@ -29,7 +29,6 @@ def test_positive_support_response_methods(dims: tuple[int, int, int, int]) -> N
     """PositiveSupportResponse has survival methods and missingness transforms."""
     N, T, p, k = dims
     resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).weibull()
-    assert hasattr(resp, "competing_risks")
     assert hasattr(resp, "censor")
     assert hasattr(resp, "missing_x")
     assert hasattr(resp, "missing_y")
@@ -38,7 +37,7 @@ def test_positive_support_response_methods(dims: tuple[int, int, int, int]) -> N
 def test_all_positive_support_families_have_survival_methods(
     dims: tuple[int, int, int, int],
 ) -> None:
-    """All positive-support families expose censor and competing_risks."""
+    """All positive-support families expose censor."""
     N, T, p, k = dims
     base = simulate(torch.randn(N, T, p), torch.randn(p, k))
     families = [
@@ -50,7 +49,6 @@ def test_all_positive_support_families_have_survival_methods(
         base.gompertz(),
     ]
     for resp in families:
-        assert hasattr(resp, "competing_risks")
         assert hasattr(resp, "censor")
 
 
@@ -60,7 +58,6 @@ def test_general_response_lacks_survival_methods(
     """General families do not expose survival methods."""
     N, T, p, k = dims
     resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
-    assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "censor")
 
 
@@ -143,7 +140,7 @@ def test_full_chain(dims: tuple[int, int, int, int]) -> None:
         .draw(seed=1)
     )
     assert data.y.numel() > 0
-    assert data.event_time.numel() > 0
+    assert data.cause.numel() > 0
     assert data.censor_time.numel() > 0
     assert data.beta.numel() > 0
 

@@ -3,8 +3,9 @@ import torch
 import torch.distributions as dist
 import torch.nn.functional as F
 
-from simulacra import PredictorData, simulate
+from simulacra import PredictorData, ResponseData, simulate
 from simulacra.covariance import MaternOrder, matern_kernel
+from simulacra.survival import censor
 from simulacra.transforms import random_effects
 
 # --- custom points ---
@@ -124,8 +125,57 @@ def test_censor_time(dims: tuple[int, int, int, int]) -> None:
     assert (data.censor_time <= bound).all()
 
 
-def test_censor_scalar_dropout_k_outcomes(dims: tuple[int, int, int, int]) -> None:
-    """Scalar dropout: censor_time is (n, t, 1) regardless of k (per-subject censoring)."""
+def test_censor_competing_risks_resolution() -> None:
+    """Hardcoded race: cell 0's cause 0 is soonest (event); cell 1's censoring time beats
+    every cause (censored, sentinel cause k = 2, all-zero indicator)."""
+    data = ResponseData(
+        X=torch.zeros(1, 2, 1),
+        points=torch.zeros(1, 2, 1),
+        eta=torch.zeros(1, 2, 2),
+        beta=torch.zeros(1, 2),
+        y=torch.tensor([[[2.0, 5.0], [5.0, 8.0]]]),
+    )
+    result = censor(data, dropout=torch.tensor([[[3.0], [3.0]]]))
+    assert result.cause.equal(torch.tensor([[[0], [2]]]))
+    assert result.time_to_event.equal(torch.tensor([[[2.0], [3.0]]]))
+    assert result.indicator.equal(torch.tensor([[[1.0, 0.0], [0.0, 0.0]]]))
+    assert result.censor_time.equal(torch.tensor([[[3.0], [3.0]]]))
+
+
+def test_censor_tie_resolves_to_event() -> None:
+    """A cause time equal to the censoring time resolves to the event: the cause column
+    precedes the censor column, so the arg-min (lowest index) picks the cause."""
+    data = ResponseData(
+        X=torch.zeros(1, 1, 1),
+        points=torch.zeros(1, 1, 1),
+        eta=torch.zeros(1, 1, 2),
+        beta=torch.zeros(1, 2),
+        y=torch.tensor([[[3.0, 8.0]]]),
+    )
+    result = censor(data, dropout=torch.tensor([[[3.0]]]))
+    assert result.cause.equal(torch.tensor([[[0]]]))
+    assert result.indicator.equal(torch.tensor([[[1.0, 0.0]]]))
+
+
+def test_censor_single_event_degeneracy() -> None:
+    """k = 1 reduces to standard single-event TTE: event when y precedes censoring
+    (cause 0), else censored (sentinel cause 1, all-zero indicator)."""
+    data = ResponseData(
+        X=torch.zeros(1, 2, 1),
+        points=torch.zeros(1, 2, 1),
+        eta=torch.zeros(1, 2, 1),
+        beta=torch.zeros(1, 1),
+        y=torch.tensor([[[2.0], [5.0]]]),
+    )
+    result = censor(data, dropout=torch.tensor([[[3.0], [3.0]]]))
+    assert result.cause.equal(torch.tensor([[[0], [1]]]))
+    assert result.time_to_event.equal(torch.tensor([[[2.0], [3.0]]]))
+    assert result.indicator.equal(torch.tensor([[[1.0], [0.0]]]))
+
+
+def test_censor_competing_risks_shapes(dims: tuple[int, int, int, int]) -> None:
+    """Competing-risks censor collapses the k causes to one outcome per cell: scalar
+    time_to_event/censor_time/cause (n, t, 1) and a (n, t, k) cause indicator."""
     N, T, p, k = dims
     data = (
         simulate(torch.randn(N, T, p), torch.randn(p, k))
@@ -133,10 +183,41 @@ def test_censor_scalar_dropout_k_outcomes(dims: tuple[int, int, int, int]) -> No
         .censor(horizon=2.0)
         .draw(seed=1)
     )
-    assert data.y.shape == (N, T, k)
-    assert data.event_time.shape == (N, T, k)
+    assert data.time_to_event.shape == (N, T, 1)
     assert data.censor_time.shape == (N, T, 1)
-    assert data.observed_time.shape == (N, T, k)
+    assert data.cause.shape == (N, T, 1)
+    assert data.cause.dtype == torch.long
+    assert data.indicator.shape == (N, T, k)
+
+
+def test_censor_indicator_one_hot_or_censored(dims: tuple[int, int, int, int]) -> None:
+    """Each cell is exactly one cause or censored: the indicator row sums to 1 (event) or
+    0 (censored), with 0/1 entries."""
+    N, T, p, k = dims
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .weibull()
+        .censor(horizon=2.0)
+        .draw(seed=1)
+    )
+    row_sum = data.indicator.sum(-1)
+    assert ((row_sum == 0) | (row_sum == 1)).all()
+    assert ((data.indicator == 0) | (data.indicator == 1)).all()
+
+
+def test_censor_discretize_pipeline(dims: tuple[int, int, int, int]) -> None:
+    """censor then discretize yields per-cause discretized exposure (n, t, k, j) >= 0."""
+    N, T, p, k = dims
+    boundaries = torch.tensor([0.0, 1.0, 2.0, 4.0])
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .weibull()
+        .censor(horizon=3.0)
+        .discretize(boundaries)
+        .draw(seed=1)
+    )
+    assert data.discrete_event_time.shape == (N, T, k, 3)
+    assert (data.discrete_event_time >= 0).all()
 
 
 def test_dropout_none_defaults_to_exponential(dims: tuple[int, int, int, int]) -> None:

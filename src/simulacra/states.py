@@ -1,7 +1,7 @@
 from dataclasses import MISSING, dataclass, fields
 from typing import cast
 
-from jaxtyping import Float
+from jaxtyping import Float, Int
 from torch import Tensor
 
 
@@ -57,16 +57,11 @@ class ResponseData(PredictorData):
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)
-class EventTimeData(ResponseData):
-    event_time: Float[Tensor, "n t k"]
+class SurvivalData(ResponseData):
     censor_time: Float[Tensor, "n t 1"]
-
-
-@dataclass(frozen=True, repr=False, kw_only=True)
-class SurvivalData(EventTimeData):
+    time_to_event: Float[Tensor, "n t 1"]
     indicator: Float[Tensor, "n t k"]
-    observed_time: Float[Tensor, "n t k"]
-    time_to_event: Float[Tensor, "n t k"]
+    cause: Int[Tensor, "n t 1"]
 
 
 @dataclass(frozen=True, repr=False, kw_only=True)

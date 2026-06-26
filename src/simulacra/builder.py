@@ -26,14 +26,8 @@ from .family import (
 )
 from .graph import Graph, build_graph, guide, step
 from .pipeline import Pipeline, label
-from .states import (
-    DiscreteSurvivalData,
-    EventTimeData,
-    PredictorData,
-    ResponseData,
-    SurvivalData,
-)
-from .survival import censor, competing_risks, discretize
+from .states import DiscreteSurvivalData, PredictorData, ResponseData, SurvivalData
+from .survival import censor, discretize
 from .transforms import (
     activation,
     constant_y,
@@ -109,7 +103,7 @@ class _ResponsePipeline[S: ResponseData](_Pipeline[S]):
 class Response(_ResponsePipeline[ResponseData]): ...
 
 
-class _CensorPipeline[S: ResponseData](_ResponsePipeline[S]):
+class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     @step
     def censor(
         self,
@@ -117,15 +111,6 @@ class _CensorPipeline[S: ResponseData](_ResponsePipeline[S]):
         horizon: float | Tensor = torch.inf,
     ) -> Survival:
         return self._step(Survival, censor, dropout=dropout, horizon=horizon)
-
-
-class PositiveSupportResponse(_CensorPipeline[ResponseData]):
-    @step
-    def competing_risks(self) -> CompetingResponse:
-        return self._step(CompetingResponse, competing_risks)
-
-
-class CompetingResponse(_CensorPipeline[EventTimeData]): ...
 
 
 class Survival(_ResponsePipeline[SurvivalData]):
@@ -246,10 +231,5 @@ class Predictor(_Pipeline[PredictorData]):
 
 
 GRAPH: Final[Graph] = build_graph(
-    Predictor,
-    Response,
-    PositiveSupportResponse,
-    CompetingResponse,
-    Survival,
-    DiscreteSurvival,
+    Predictor, Response, PositiveSupportResponse, Survival, DiscreteSurvival
 )

@@ -3,7 +3,6 @@ import torch
 
 from simulacra import (
     GRAPH,
-    CompetingResponse,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
@@ -13,7 +12,6 @@ from simulacra import (
 )
 
 ALL_STATES: set[type] = {
-    CompetingResponse,
     DiscreteSurvival,
     PositiveSupportResponse,
     Predictor,
@@ -58,13 +56,8 @@ def test_response_transitions() -> None:
 
 
 def test_positive_support_response_transitions() -> None:
-    expected = {"competing_risks", "censor", "missing_x", "missing_y", "constant_y"}
-    assert GRAPH.methods_on(PositiveSupportResponse) == expected
-
-
-def test_competing_response_transitions() -> None:
     expected = {"censor", "missing_x", "missing_y", "constant_y"}
-    assert GRAPH.methods_on(CompetingResponse) == expected
+    assert GRAPH.methods_on(PositiveSupportResponse) == expected
 
 
 def test_survival_transitions() -> None:
@@ -92,11 +85,11 @@ def test_family_targets() -> None:
 
 def test_to_state_survival() -> None:
     sources = {t.source for t in GRAPH.to_state(Survival)}
-    assert sources == {Survival, PositiveSupportResponse, CompetingResponse}
+    assert sources == {Survival, PositiveSupportResponse}
 
 
 def test_owners_of_censor() -> None:
-    assert GRAPH.owners_of("censor") == {"CompetingResponse", "PositiveSupportResponse"}
+    assert GRAPH.owners_of("censor") == {"PositiveSupportResponse"}
 
 
 def test_draw_not_in_graph() -> None:
@@ -113,7 +106,7 @@ def test_response_censor_guides(dims: tuple[int, int, int, int]) -> None:
     resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
     with pytest.raises(
         AttributeError,
-        match=r"Response has no method censor\(\).*CompetingResponse.*PositiveSupportResponse",
+        match=r"Response has no method censor\(\).*PositiveSupportResponse",
     ):
         resp.censor()  # type: ignore[attr-defined]
 
@@ -140,7 +133,6 @@ def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
     N, T, p, k = dims
     resp = simulate(torch.randn(N, T, p), torch.randn(p, k)).gaussian()
     assert not hasattr(resp, "censor")
-    assert not hasattr(resp, "competing_risks")
     assert not hasattr(resp, "discretize")
     assert not hasattr(resp, "random_effects")
 
