@@ -6,10 +6,8 @@ import torch.distributions as dist
 from jaxtyping import Float
 from torch import Tensor
 
+from .covariance import array_normal
 from .states import PredictorData, RandomEffect, ResponseData
-
-_linalg = getattr(torch, "linalg")
-_cholesky: Callable[[Tensor], Tensor] = _linalg.cholesky
 
 
 def fixed_effects(
@@ -19,10 +17,6 @@ def fixed_effects(
 ) -> PredictorData:
     eta = X @ beta
     return PredictorData(X=X, points=points, eta=eta, beta=beta)
-
-
-def _cholesky_factor(covariance: Tensor | None, size: int) -> Tensor:
-    return torch.eye(size) if covariance is None else _cholesky(covariance)
 
 
 def random_effects(
@@ -37,9 +31,7 @@ def random_effects(
     q = B.shape[-1]
     k = data.eta.shape[-1]
     noise = torch.randn(levels, q, k) if z is None else z
-    chol_basis = _cholesky_factor(basis_covariance, q)
-    chol_outcome = _cholesky_factor(outcome_covariance, k)
-    b = chol_basis @ noise @ chol_outcome.mT
+    b = array_normal(noise, basis_covariance, outcome_covariance)
     eta = torch.einsum("ntl,ntr,lrk->ntk", W, B, b)
     return replace(
         data,

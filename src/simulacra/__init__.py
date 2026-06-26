@@ -22,7 +22,12 @@ from .builder import (
     Survival,
     simulate,
 )
-from .covariance import MaternOrder, matern_kernel, random_effects_covariance
+from .covariance import (
+    MaternOrder,
+    array_normal,
+    matern_kernel,
+    random_effects_covariance,
+)
 from .family import Family
 from .graph import Graph, Transition, build_graph, step
 from .pipeline import Pipeline, Run, Step, label
@@ -57,6 +62,7 @@ __all__ = [
     "Survival",
     "SurvivalData",
     "Transition",
+    "array_normal",
     "build_graph",
     "label",
     "matern_kernel",

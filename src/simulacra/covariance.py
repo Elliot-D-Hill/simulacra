@@ -1,9 +1,13 @@
 import math
+from collections.abc import Callable
 from enum import Enum
 
 import torch
 from jaxtyping import Float
 from torch import Tensor
+
+_linalg = getattr(torch, "linalg")
+_cholesky: Callable[[Tensor], Tensor] = _linalg.cholesky
 
 
 def random_effects_covariance(
@@ -58,3 +62,22 @@ def matern_kernel(
             return (1.0 + s + s**2 / 3.0) * torch.exp(-s)
         case MaternOrder.INFINITY:
             return torch.exp(-0.5 * r**2)
+
+
+def _cholesky_factor(covariance: Tensor | None, size: int) -> Tensor:
+    return torch.eye(size) if covariance is None else _cholesky(covariance)
+
+
+def array_normal(
+    noise: Float[Tensor, "*batch row col"],
+    row_covariance: Float[Tensor, "row row"] | None = None,
+    column_covariance: Float[Tensor, "col col"] | None = None,
+) -> Float[Tensor, "*batch row col"]:
+    """Color iid noise into a matrix-variate normal: X = chol_row @ Z @ chol_col.mT,
+    so Cov(vec X) = column_covariance (x) row_covariance. A None factor is the
+    identity, leaving that axis uncorrelated.
+    """
+    *_, row, col = noise.shape
+    chol_row = _cholesky_factor(row_covariance, row)
+    chol_column = _cholesky_factor(column_covariance, col)
+    return chol_row @ noise @ chol_column.mT

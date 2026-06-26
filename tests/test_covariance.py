@@ -1,7 +1,12 @@
 import pytest
 import torch
 
-from simulacra.covariance import MaternOrder, matern_kernel, random_effects_covariance
+from simulacra.covariance import (
+    MaternOrder,
+    array_normal,
+    matern_kernel,
+    random_effects_covariance,
+)
 
 
 def test_compound_symmetry() -> None:
@@ -95,3 +100,19 @@ def test_matern_kernel_scales_via_random_effects_covariance() -> None:
     covariance = random_effects_covariance(torch.tensor([2.0, 2.0]), correlation=K)
     expected = torch.tensor([[4.0, 1.471518], [1.471518, 4.0]])
     assert torch.allclose(covariance, expected, atol=1e-5)
+
+
+def test_array_normal_neutral_returns_noise() -> None:
+    """Both covariances None: identity factors leave the noise unchanged."""
+    noise = torch.randn(5, 2, 3)
+    assert array_normal(noise).equal(noise)
+
+
+def test_array_normal_colors_both_axes() -> None:
+    """Diagonal row and column covariances scale each axis independently."""
+    noise = torch.ones(1, 2, 2)
+    row_covariance = torch.tensor([[4.0, 0.0], [0.0, 9.0]])
+    column_covariance = torch.tensor([[1.0, 0.0], [0.0, 16.0]])
+    X = array_normal(noise, row_covariance, column_covariance)
+    expected = torch.tensor([[[2.0, 8.0], [3.0, 12.0]]])
+    assert X.equal(expected)
