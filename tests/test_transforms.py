@@ -135,7 +135,7 @@ def test_censor_competing_risks_resolution() -> None:
         beta=torch.zeros(1, 2),
         y=torch.tensor([[[2.0, 5.0], [5.0, 8.0]]]),
     )
-    result = censor(data, dropout=torch.tensor([[[3.0], [3.0]]]))
+    result = censor(data, censor_time=torch.tensor([[[3.0], [3.0]]]))
     assert result.cause.equal(torch.tensor([[[0], [2]]]))
     assert result.time_to_event.equal(torch.tensor([[[2.0], [3.0]]]))
     assert result.indicator.equal(torch.tensor([[[1.0, 0.0], [0.0, 0.0]]]))
@@ -152,7 +152,7 @@ def test_censor_tie_resolves_to_event() -> None:
         beta=torch.zeros(1, 2),
         y=torch.tensor([[[3.0, 8.0]]]),
     )
-    result = censor(data, dropout=torch.tensor([[[3.0]]]))
+    result = censor(data, censor_time=torch.tensor([[[3.0]]]))
     assert result.cause.equal(torch.tensor([[[0]]]))
     assert result.indicator.equal(torch.tensor([[[1.0, 0.0]]]))
 
@@ -167,7 +167,7 @@ def test_censor_single_event_degeneracy() -> None:
         beta=torch.zeros(1, 1),
         y=torch.tensor([[[2.0], [5.0]]]),
     )
-    result = censor(data, dropout=torch.tensor([[[3.0], [3.0]]]))
+    result = censor(data, censor_time=torch.tensor([[[3.0], [3.0]]]))
     assert result.cause.equal(torch.tensor([[[0], [1]]]))
     assert result.time_to_event.equal(torch.tensor([[[2.0], [3.0]]]))
     assert result.indicator.equal(torch.tensor([[[1.0], [0.0]]]))
@@ -220,8 +220,9 @@ def test_censor_discretize_pipeline(dims: tuple[int, int, int, int]) -> None:
     assert (data.discrete_event_time >= 0).all()
 
 
-def test_dropout_none_defaults_to_exponential(dims: tuple[int, int, int, int]) -> None:
-    """censor with dropout=None samples (n, t, 1) from Exponential(1) internally."""
+def test_censor_no_censor_time_uses_horizon(dims: tuple[int, int, int, int]) -> None:
+    """With no censor_time, the realized censoring time is the administrative deadline
+    points + horizon (the default that replaces the old hardcoded Exponential draw)."""
     N, T, p, k = dims
     data = (
         simulate(torch.randn(N, T, p), torch.randn(p, k))
@@ -229,21 +230,20 @@ def test_dropout_none_defaults_to_exponential(dims: tuple[int, int, int, int]) -
         .censor(horizon=10.0)
         .draw(seed=0)
     )
-    assert data.censor_time.shape == (N, T, 1)
-    assert (data.censor_time > 0).all()
+    assert data.censor_time.equal(data.points + 10.0)
 
 
-def test_dropout_explicit_tensor(dims: tuple[int, int, int, int]) -> None:
-    """censor accepts an explicit dropout tensor of shape (n, t, 1)."""
+def test_censor_explicit_censor_time(dims: tuple[int, int, int, int]) -> None:
+    """An explicit censor_time passes through when it precedes the horizon deadline."""
     N, T, p, k = dims
-    dropout = torch.full((N, T, 1), 0.5)
+    censor_time = torch.full((N, T, 1), 0.5)
     data = (
         simulate(torch.randn(N, T, p), torch.randn(p, k))
         .weibull()
-        .censor(dropout=dropout, horizon=10.0)
+        .censor(censor_time=censor_time, horizon=10.0)
         .draw(seed=0)
     )
-    assert data.censor_time.shape == (N, T, 1)
+    assert data.censor_time.equal(censor_time)
 
 
 # --- random effects ---

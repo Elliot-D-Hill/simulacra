@@ -107,10 +107,10 @@ class PositiveSupportResponse(_ResponsePipeline[ResponseData]):
     @step
     def censor(
         self,
-        dropout: Float[Tensor, "n t 1"] | None = None,
+        censor_time: Float[Tensor, "n t 1"] | None = None,
         horizon: float | Tensor = torch.inf,
     ) -> Survival:
-        return self._step(Survival, censor, dropout=dropout, horizon=horizon)
+        return self._step(Survival, censor, censor_time=censor_time, horizon=horizon)
 
 
 class Survival(_ResponsePipeline[SurvivalData]):

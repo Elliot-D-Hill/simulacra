@@ -1,5 +1,4 @@
 import torch
-import torch.distributions as dist
 import torch.nn.functional as F
 from jaxtyping import Float
 from torch import Tensor
@@ -9,23 +8,25 @@ from .states import DiscreteSurvivalData, ResponseData, SurvivalData, promote
 
 def censor(
     data: ResponseData,
-    dropout: Float[Tensor, "n t 1"] | None = None,
+    censor_time: Float[Tensor, "n t 1"] | None = None,
     horizon: float | Tensor = torch.inf,
 ) -> SurvivalData:
-    """Race the k cause-specific times in y against the censoring time (dropout, capped
-    at points + horizon); the soonest wins. cause is the winner's index, or k when
-    censored. Single-event TTE is the k = 1 case.
+    """Race the k cause-specific times in y against the censoring time; the soonest wins.
+    cause is the winner's index, or k when censored. censor_time defaults to the
+    administrative deadline points + horizon (horizon = inf is no censoring), and an
+    explicit tensor is capped by it. Single-event TTE is the k = 1 case.
     """
-    n, t, k = data.y.shape
-    if dropout is None:
-        dropout = dist.Exponential(1.0).sample((n, t, 1))
-    censor_time = torch.minimum(dropout, data.points + horizon)  # [n t 1]
+    k = data.y.shape[-1]
+    deadline = data.points + horizon  # [n t 1]; admin cutoff, inf = none
+    censor_time = (
+        deadline if censor_time is None else torch.minimum(censor_time, deadline)
+    )
     competitors = torch.cat(
         [data.y, censor_time], dim=-1
     )  # [n t k+1]; censor is column k
     observed_time, cause = competitors.min(
         dim=-1, keepdim=True
-    )  # [n t 1]; cause 0..k-1, k censored
+    )  # [n t 1]; cause k censored
     indicator = F.one_hot(cause.squeeze(-1), k + 1)[..., :k].to(data.y.dtype)  # [n t k]
     time_to_event = observed_time - data.points  # [n t 1]
     return promote(
@@ -49,5 +50,5 @@ def discretize(data: SurvivalData, boundaries: Tensor) -> DiscreteSurvivalData:
     mask = indicator * in_interval.to(exposure.dtype) + (1.0 - indicator)  # [n t k j]
     discrete = (
         exposure * mask
-    )  # [n t k j]; shared tte broadcasts against the per-cause indicator
+    )  # [n t k j]; shared tte broadcasts against per-cause indicator
     return promote(DiscreteSurvivalData, data, discrete_event_time=discrete)
