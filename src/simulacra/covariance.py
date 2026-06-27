@@ -19,6 +19,13 @@ def _is_correlation(x: float) -> bool:
 type Correlation = Annotated[float, Is[_is_correlation]]
 
 
+def _is_positive(x: float) -> bool:
+    return x > 0.0
+
+
+type Positive = Annotated[float, Is[_is_positive]]
+
+
 def random_effects_covariance(
     std: Float[Tensor, "q"], correlation: Float[Tensor, "q q"] | Correlation = 0.0
 ) -> Float[Tensor, "q q"]:
@@ -44,7 +51,7 @@ class MaternOrder(Enum):
 
 def matern_kernel(
     points: Float[Tensor, "t"],
-    length_scale: float = 1.0,
+    length_scale: Positive = 1.0,
     order: MaternOrder = MaternOrder.THREE_HALVES,
 ) -> Float[Tensor, "t t"]:
     """Matern correlation over points, unit diagonal (amplitude 1).

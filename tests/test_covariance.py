@@ -96,6 +96,12 @@ def test_matern_kernel_length_scale() -> None:
     assert torch.allclose(K, expected, atol=1e-5)
 
 
+def test_matern_kernel_nonpositive_length_scale_rejected() -> None:
+    """length_scale must be positive; <= 0 is rejected at the call boundary."""
+    with pytest.raises(TypeCheckError):
+        matern_kernel(torch.tensor([0.0, 1.0]), length_scale=0.0)
+
+
 def test_matern_kernel_scales_via_random_effects_covariance() -> None:
     """matern_kernel feeds random_effects_covariance as the correlation matrix."""
     K = matern_kernel(torch.tensor([0.0, 1.0]), order=MaternOrder.HALF)
