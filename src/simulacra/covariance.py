@@ -8,8 +8,7 @@ from beartype.vale import Is
 from jaxtyping import Float
 from torch import Tensor
 
-_linalg = getattr(torch, "linalg")
-_cholesky: Callable[[Tensor], Tensor] = _linalg.cholesky
+_cholesky: Callable[[Tensor], Tensor] = getattr(torch, "linalg").cholesky
 
 
 def _is_correlation(x: float) -> bool:
