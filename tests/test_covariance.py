@@ -1,5 +1,6 @@
 import pytest
 import torch
+from jaxtyping import TypeCheckError
 
 from simulacra.covariance import (
     MaternOrder,
@@ -22,10 +23,10 @@ def test_diagonal_default() -> None:
     assert covariance.equal(torch.tensor([[4.0, 0.0], [0.0, 9.0]]))
 
 
-def test_pd_bound_raises() -> None:
-    """Compound symmetry at or below -1/(q-1) is indefinite and raises."""
-    with pytest.raises(ValueError, match="positive definite"):
-        random_effects_covariance(torch.tensor([1.0, 1.0, 1.0]), -0.5)
+def test_correlation_out_of_range_rejected() -> None:
+    """Scalar correlation outside [-1, 1] is not a valid correlation and is rejected."""
+    with pytest.raises(TypeCheckError):
+        random_effects_covariance(torch.tensor([1.0, 1.0]), 2.0)
 
 
 def test_matern_kernel_exponential() -> None:

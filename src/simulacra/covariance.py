@@ -1,8 +1,10 @@
 import math
 from collections.abc import Callable
 from enum import Enum
+from typing import Annotated
 
 import torch
+from beartype.vale import Is
 from jaxtyping import Float
 from torch import Tensor
 
@@ -10,8 +12,15 @@ _linalg = getattr(torch, "linalg")
 _cholesky: Callable[[Tensor], Tensor] = _linalg.cholesky
 
 
+def _is_correlation(x: float) -> bool:
+    return -1.0 <= x <= 1.0
+
+
+type Correlation = Annotated[float, Is[_is_correlation]]
+
+
 def random_effects_covariance(
-    std: Float[Tensor, "q"], correlation: Float[Tensor, "q q"] | float = 0.0
+    std: Float[Tensor, "q"], correlation: Float[Tensor, "q q"] | Correlation = 0.0
 ) -> Float[Tensor, "q q"]:
     """Random-effects covariance Q = S R S, S = diag(std).
 
@@ -21,11 +30,6 @@ def random_effects_covariance(
     q = std.shape[-1]
     correlation = torch.as_tensor(correlation, dtype=std.dtype)
     if correlation.ndim == 0:
-        if q > 1 and correlation <= -1.0 / (q - 1):
-            raise ValueError(
-                f"compound-symmetry correlation {correlation.item()} must exceed "
-                f"-1/(q-1) = {-1.0 / (q - 1)} for q={q} to stay positive definite"
-            )
         correlation = torch.eye(q, dtype=std.dtype) * (1.0 - correlation) + correlation
     std_diagonal = std.diag()
     return std_diagonal @ correlation @ std_diagonal
