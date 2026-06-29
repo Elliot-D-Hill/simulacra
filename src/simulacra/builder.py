@@ -31,6 +31,7 @@ from .survival import censor, discretize
 from .transforms import (
     activation,
     constant_y,
+    factor_effects,
     fixed_effects,
     missing_x,
     missing_y,
@@ -139,6 +140,23 @@ class Predictor(_Pipeline[PredictorData]):
             B=B,
             z=z,
             outcome_covariance=outcome_covariance,
+            basis_covariance=basis_covariance,
+        )
+
+    @step
+    def factor_effects(
+        self,
+        W: Float[Tensor, "n t levels"],
+        B: Float[Tensor, "n t q"],
+        loading: Float[Tensor, "q k"],
+        basis_covariance: Float[Tensor, "q q"] | None = None,
+    ) -> Predictor:
+        return self._step(
+            Predictor,
+            factor_effects,
+            W=W,
+            B=B,
+            loading=loading,
             basis_covariance=basis_covariance,
         )
 

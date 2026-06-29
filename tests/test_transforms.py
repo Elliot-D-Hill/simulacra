@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from simulacra import PredictorData, ResponseData, simulate
 from simulacra.covariance import MaternOrder, matern_kernel
 from simulacra.survival import censor
-from simulacra.transforms import random_effects
+from simulacra.transforms import factor_effects, random_effects
 
 # --- custom points ---
 
@@ -471,6 +471,106 @@ def test_matern_basis_covariance_recovers_temporal_kernel() -> None:
     re = random_effects(base, W, B, basis_covariance=K_T)
     empirical = torch.cov(re.random_effect[-1].b[:, :, 0].mT)
     assert torch.allclose(empirical, K_T, atol=0.05)
+
+
+# --- factor effects ---
+
+
+def test_factor_effects_b_is_scores_times_loading(re_base: PredictorData) -> None:
+    """b is the outer product of the iid score draw with the loading."""
+    L, q = 3, 2
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, q)
+    loading = torch.tensor([[1.0, 1.0], [2.0, -2.0]])
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    drawn = factor_effects(re_base, W, B, loading).random_effect[-1].b
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    u = torch.randn(L, q)
+    expected = torch.einsum("lr,rk->lrk", u, loading)
+    assert drawn.equal(expected)
+
+
+def test_factor_effects_per_term_outcome_covariance_is_rank_one() -> None:
+    """Each basis term has a rank-1 outcome covariance (outer of its loading row),
+    differing across terms: reduced-rank, not a shared full outcome covariance."""
+    L, q, k = 40000, 2, 3
+    base = PredictorData(
+        X=torch.zeros(1, 1, 1),
+        points=torch.zeros(1, 1, 1),
+        eta=torch.zeros(1, 1, k),
+        beta=torch.zeros(1, k),
+    )
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, q)
+    loading = torch.tensor([[1.0, 1.0, 1.0], [2.0, 0.0, -2.0]])
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    re = factor_effects(base, W, B, loading)
+    cov_trend = torch.cov(re.random_effect[-1].b[:, 0, :].mT)
+    cov_accel = torch.cov(re.random_effect[-1].b[:, 1, :].mT)
+    assert torch.allclose(cov_trend, torch.ones(3, 3), atol=0.05)
+    assert torch.allclose(
+        cov_accel,
+        torch.tensor([[4.0, 0.0, -4.0], [0.0, 0.0, 0.0], [-4.0, 0.0, 4.0]]),
+        atol=0.05,
+    )
+
+
+def test_factor_effects_basis_covariance_colors_scores() -> None:
+    """basis_covariance is the among-score (q-axis) covariance, as in random_effects."""
+    L, q, k = 40000, 2, 1
+    base = PredictorData(
+        X=torch.zeros(1, 1, 1),
+        points=torch.zeros(1, 1, 1),
+        eta=torch.zeros(1, 1, k),
+        beta=torch.zeros(1, k),
+    )
+    W = torch.zeros(1, 1, L)
+    B = torch.zeros(1, 1, q)
+    loading = torch.ones(q, k)
+    basis_covariance = torch.tensor([[1.0, 0.6], [0.6, 1.0]])
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    re = factor_effects(base, W, B, loading, basis_covariance=basis_covariance)
+    empirical = torch.cov(re.random_effect[-1].b[:, :, 0].mT)
+    assert torch.allclose(empirical, basis_covariance, atol=0.05)
+
+
+def test_factor_effects_pure_1k_loading_constant_over_outcomes(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """A pure 1_K loading routes the trajectory into the shared (timing) direction:
+    its eta contribution is identical across the k outcomes."""
+    N, T, p, k = dims
+    q = 2
+    W = F.one_hot(torch.arange(N), N).float().unsqueeze(1).expand(N, T, N)
+    B = torch.randn(N, T, q)
+    loading = torch.ones(q, k)
+    data = (
+        simulate(torch.zeros(N, T, p), torch.zeros(p, k))
+        .factor_effects(W=W, B=B, loading=loading)
+        .gaussian()
+        .draw(seed=0)
+    )
+    for j in range(1, k):
+        assert data.eta[..., 0].equal(data.eta[..., j])
+
+
+def test_factor_effects_pipeline_records_low_rank_b(
+    dims: tuple[int, int, int, int],
+) -> None:
+    """factor_effects flows through the pipeline and records b = u (x) loading."""
+    N, T, p, k = dims
+    q = 2
+    W = F.one_hot(torch.arange(N), N).float().unsqueeze(1).expand(N, T, N)
+    B = torch.randn(N, T, q)
+    loading = torch.randn(q, k)
+    data = (
+        simulate(torch.randn(N, T, p), torch.randn(p, k))
+        .factor_effects(W=W, B=B, loading=loading)
+        .gaussian()
+        .draw(seed=0)
+    )
+    assert data.random_effect[-1].b.shape == (N, q, k)
+    assert data.eta.shape == (N, T, k)
 
 
 # --- activation ---

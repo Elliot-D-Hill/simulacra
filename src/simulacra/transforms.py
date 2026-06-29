@@ -49,6 +49,24 @@ def random_effects(
     return _apply_random_effect(data, W, B, b)
 
 
+def factor_effects(
+    data: PredictorData,
+    W: Float[Tensor, "n t levels"],
+    B: Float[Tensor, "n t q"],
+    loading: Float[Tensor, "q k"],
+    basis_covariance: Float[Tensor, "q q"] | None = None,
+) -> PredictorData:
+    """Reduced-rank random effect: per-level scores u ~ N(0, basis_covariance) reach
+    the k outcomes through a fixed loading, b[l, r, k] = u[l, r] * loading[r, k]. The
+    factor-analytic sibling of random_effects (full outcome cov -> low-rank loading).
+    """
+    levels = W.shape[-1]
+    q = B.shape[-1]
+    u = array_normal(torch.randn(levels, q), None, basis_covariance)  # [levels q]
+    b = torch.einsum("lr,rk->lrk", u, loading)  # [levels q k]
+    return _apply_random_effect(data, W, B, b)
+
+
 def missing_x[S: PredictorData](data: S, proportion: float) -> S:
     mask = torch.rand_like(data.X) < proportion
     return replace(data, X=data.X.masked_fill(mask, float("nan")))

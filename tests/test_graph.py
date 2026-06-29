@@ -27,6 +27,7 @@ def test_graph_contains_all_concrete_classes() -> None:
 def test_predictor_transitions() -> None:
     expected = {
         "random_effects",
+        "factor_effects",
         "activation",
         "tokenize",
         "treatment",
@@ -73,6 +74,7 @@ def test_discrete_survival_transitions() -> None:
 def test_same_type_transitions_are_self() -> None:
     predictor_targets = {t.method: t.target for t in GRAPH.from_state(Predictor)}
     assert predictor_targets["random_effects"] is None
+    assert predictor_targets["factor_effects"] is None
     assert predictor_targets["activation"] is None
     assert predictor_targets["tokenize"] is None
 
@@ -135,6 +137,7 @@ def test_hasattr_still_returns_false(dims: tuple[int, int, int, int]) -> None:
     assert not hasattr(resp, "censor")
     assert not hasattr(resp, "discretize")
     assert not hasattr(resp, "random_effects")
+    assert not hasattr(resp, "factor_effects")
 
 
 def test_valid_method_still_works(dims: tuple[int, int, int, int]) -> None:
