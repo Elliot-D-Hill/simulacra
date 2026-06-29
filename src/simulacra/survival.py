@@ -21,12 +21,8 @@ def censor(
     censor_time = (
         deadline if censor_time is None else torch.minimum(censor_time, deadline)
     )
-    competitors = torch.cat(
-        [data.y, censor_time], dim=-1
-    )  # [n t k+1]; censor is column k
-    observed_time, cause = competitors.min(
-        dim=-1, keepdim=True
-    )  # [n t 1]; cause k censored
+    competitors = torch.cat([data.y, censor_time], dim=-1)  # [n t k+1]
+    observed_time, cause = competitors.min(dim=-1, keepdim=True)  # [n t 1]
     indicator = F.one_hot(cause.squeeze(-1), k + 1)[..., :k].to(data.y.dtype)  # [n t k]
     time_to_event = observed_time - data.points  # [n t 1]
     return promote(
