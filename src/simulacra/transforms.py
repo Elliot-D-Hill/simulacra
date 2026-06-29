@@ -19,6 +19,20 @@ def fixed_effects(
     return PredictorData(X=X, points=points, eta=eta, beta=beta)
 
 
+def _apply_random_effect(
+    data: PredictorData,
+    W: Float[Tensor, "n t levels"],
+    B: Float[Tensor, "n t q"],
+    b: Float[Tensor, "levels q k"],
+) -> PredictorData:
+    eta = torch.einsum("ntl,ntr,lrk->ntk", W, B, b)
+    return replace(
+        data,
+        eta=data.eta + eta,
+        random_effect=(*data.random_effect, RandomEffect(W=W, B=B, b=b)),
+    )
+
+
 def random_effects(
     data: PredictorData,
     W: Float[Tensor, "n t levels"],
@@ -32,12 +46,7 @@ def random_effects(
     k = data.eta.shape[-1]
     noise = torch.randn(levels, q, k) if z is None else z
     b = array_normal(noise, basis_covariance, outcome_covariance)
-    eta = torch.einsum("ntl,ntr,lrk->ntk", W, B, b)
-    return replace(
-        data,
-        eta=data.eta + eta,
-        random_effect=(*data.random_effect, RandomEffect(W=W, B=B, b=b)),
-    )
+    return _apply_random_effect(data, W, B, b)
 
 
 def missing_x[S: PredictorData](data: S, proportion: float) -> S:
