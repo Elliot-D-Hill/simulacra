@@ -1,9 +1,18 @@
+"""Covariance builders separating scale from correlation: Sigma = S R S.
+
+Correlation constructors (compound_symmetry, lkj_correlation, matern_kernel)
+return unit-diagonal R and compose with plain tensor algebra (Hadamard * keeps
+the unit diagonal; + or s A + (1 - s) B add structure), scaled once by
+covariance. Cross-axis structure is Kronecker via array_normal.
+"""
+
 import math
 from collections.abc import Callable
 from enum import Enum
 from typing import Annotated
 
 import torch
+import torch.distributions as dist
 from beartype.vale import Is
 from jaxtyping import Float
 from torch import Tensor
@@ -25,20 +34,21 @@ def _is_positive(x: float) -> bool:
 type Positive = Annotated[float, Is[_is_positive]]
 
 
-def random_effects_covariance(
+def compound_symmetry(q: int, rho: Correlation = 0.0) -> Float[Tensor, "q q"]:
+    """Equicorrelation R = (1 - rho) I + rho J, unit diagonal."""
+    return torch.eye(q) * (1.0 - rho) + rho
+
+
+def covariance(
     std: Float[Tensor, "q"], correlation: Float[Tensor, "q q"] | Correlation = 0.0
 ) -> Float[Tensor, "q q"]:
-    """Random-effects covariance Q = S R S, S = diag(std).
-
-    Scalar correlation gives compound symmetry, positive definite only for
-    rho > -1/(q-1).
+    """Covariance Sigma = S R S, S = diag(std). Scalar correlation gives compound
+    symmetry; the default 0 leaves the diagonal diag(std**2).
     """
-    q = std.shape[-1]
-    correlation = torch.as_tensor(correlation, dtype=std.dtype)
-    if correlation.ndim == 0:
-        correlation = torch.eye(q, dtype=std.dtype) * (1.0 - correlation) + correlation
+    if not isinstance(correlation, Tensor):
+        correlation = compound_symmetry(std.shape[-1], correlation)
     std_diagonal = std.diag()
-    return std_diagonal @ correlation @ std_diagonal
+    return std_diagonal @ correlation.to(std) @ std_diagonal
 
 
 class MaternOrder(Enum):
@@ -57,7 +67,7 @@ def matern_kernel(
 
     order is the smoothness nu: HALF is the exponential / Ornstein-Uhlenbeck
     kernel, INFINITY the RBF (squared-exponential) limit. Scale to a covariance
-    with random_effects_covariance(std, correlation=matern_kernel(...)).
+    with covariance(std, correlation=matern_kernel(...)).
     """
     distance = (points[:, None] - points[None, :]).abs()  # [t t]
     r = distance / length_scale
@@ -74,8 +84,17 @@ def matern_kernel(
             return torch.exp(-0.5 * r**2)
 
 
-def _cholesky_factor(covariance: Tensor | None, size: int) -> Tensor:
-    return torch.eye(size) if covariance is None else _cholesky(covariance)
+def lkj_correlation(q: int, concentration: Positive = 1.0) -> Float[Tensor, "q q"]:
+    """Unstructured correlation sampled from the LKJ distribution; concentration 1
+    is uniform over correlation matrices, larger values concentrate toward I.
+    """
+    distribution = dist.LKJCholesky(q, concentration)
+    chol: Tensor = getattr(distribution, "sample")()  # [q q] lower-triangular
+    return chol @ chol.mT
+
+
+def _cholesky_factor(cov: Tensor | None, size: int) -> Tensor:
+    return torch.eye(size) if cov is None else _cholesky(cov)
 
 
 def array_normal(

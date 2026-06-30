@@ -24,8 +24,10 @@ from .builder import (
 from .covariance import (
     MaternOrder,
     array_normal,
+    compound_symmetry,
+    covariance,
+    lkj_correlation,
     matern_kernel,
-    random_effects_covariance,
     sample_features,
 )
 from .family import Family
@@ -61,10 +63,12 @@ __all__ = [
     "Transition",
     "array_normal",
     "build_graph",
+    "compound_symmetry",
+    "covariance",
     "label",
+    "lkj_correlation",
     "matern_kernel",
     "promote",
-    "random_effects_covariance",
     "sample_features",
     "simulate",
     "step",

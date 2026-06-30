@@ -5,28 +5,37 @@ from jaxtyping import TypeCheckError
 from simulacra.covariance import (
     MaternOrder,
     array_normal,
+    compound_symmetry,
+    covariance,
+    lkj_correlation,
     matern_kernel,
-    random_effects_covariance,
     sample_features,
 )
 
 
-def test_compound_symmetry() -> None:
-    """Scalar correlation builds Q = S R S with equicorrelated off-diagonals."""
-    covariance = random_effects_covariance(torch.tensor([2.0, 3.0]), 0.5)
-    assert covariance.equal(torch.tensor([[4.0, 3.0], [3.0, 9.0]]))
+def test_covariance_compound_symmetry() -> None:
+    """Scalar correlation builds Sigma = S R S with equicorrelated off-diagonals."""
+    sigma = covariance(torch.tensor([2.0, 3.0]), 0.5)
+    assert sigma.equal(torch.tensor([[4.0, 3.0], [3.0, 9.0]]))
 
 
-def test_diagonal_default() -> None:
+def test_covariance_diagonal_default() -> None:
     """Default correlation 0 gives a diagonal covariance of variances."""
-    covariance = random_effects_covariance(torch.tensor([2.0, 3.0]))
-    assert covariance.equal(torch.tensor([[4.0, 0.0], [0.0, 9.0]]))
+    sigma = covariance(torch.tensor([2.0, 3.0]))
+    assert sigma.equal(torch.tensor([[4.0, 0.0], [0.0, 9.0]]))
 
 
 def test_correlation_out_of_range_rejected() -> None:
     """Scalar correlation outside [-1, 1] is not a valid correlation and is rejected."""
     with pytest.raises(TypeCheckError):
-        random_effects_covariance(torch.tensor([1.0, 1.0]), 2.0)
+        covariance(torch.tensor([1.0, 1.0]), 2.0)
+
+
+def test_compound_symmetry() -> None:
+    """compound_symmetry builds the equicorrelation (1 - rho) I + rho J, unit diagonal."""
+    R = compound_symmetry(3, 0.5)
+    expected = torch.tensor([[1.0, 0.5, 0.5], [0.5, 1.0, 0.5], [0.5, 0.5, 1.0]])
+    assert R.equal(expected)
 
 
 def test_matern_kernel_exponential() -> None:
@@ -102,12 +111,21 @@ def test_matern_kernel_nonpositive_length_scale_rejected() -> None:
         matern_kernel(torch.tensor([0.0, 1.0]), length_scale=0.0)
 
 
-def test_matern_kernel_scales_via_random_effects_covariance() -> None:
-    """matern_kernel feeds random_effects_covariance as the correlation matrix."""
+def test_matern_kernel_scales_via_covariance() -> None:
+    """matern_kernel feeds covariance as the correlation matrix."""
     K = matern_kernel(torch.tensor([0.0, 1.0]), order=MaternOrder.HALF)
-    covariance = random_effects_covariance(torch.tensor([2.0, 2.0]), correlation=K)
+    sigma = covariance(torch.tensor([2.0, 2.0]), correlation=K)
     expected = torch.tensor([[4.0, 1.471518], [1.471518, 4.0]])
-    assert torch.allclose(covariance, expected, atol=1e-5)
+    assert torch.allclose(sigma, expected, atol=1e-5)
+
+
+def test_lkj_correlation_properties() -> None:
+    """LKJ sample is a valid correlation matrix: right shape, unit diagonal, PSD."""
+    torch.manual_seed(0)  # type: ignore[no-untyped-call]
+    R = lkj_correlation(4, concentration=1.0)
+    assert R.shape == (4, 4)
+    assert torch.allclose(R.diagonal(), torch.ones(4))
+    assert (getattr(torch, "linalg").eigvalsh(R) >= -1e-6).all()
 
 
 def test_array_normal_neutral_returns_noise() -> None:
